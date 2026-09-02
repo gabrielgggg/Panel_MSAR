@@ -27,7 +27,7 @@ def main():
         f"years {int(df.year.min())}-{int(df.year.max())}"
     )
 
-    model = PanelMSAR(n_regimes=3, common_rho=True, switch_sigma=True, min_t=12)
+    model = PanelMSAR(n_regimes=3, common_rho=True, common_sigma=False, min_t=12)
     res = model.fit(
         df["country"], df["year"], df["y"],
         n_starts=4, maxiter=250, seed=11,

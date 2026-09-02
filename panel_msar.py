@@ -301,7 +301,7 @@ class PanelMSARResults:
     warnings: list = field(default_factory=list)
     has_numba: bool = HAS_NUMBA
     common_rho: bool = True
-    switch_sigma: bool = True
+    common_sigma: bool = False
 
     def summary(self) -> str:
         k = self.n_regimes
@@ -355,7 +355,7 @@ class PanelMSARResults:
             lines.append(f"{'rho (common)':<{lab}}{_cell_est(r, W)}")
             if have_se:
                 lines.append(f"{'':<{lab}}{_cell_se(se_at(se_rho, 0), W)}")
-        if not self.switch_sigma:
+        if self.common_sigma:
             s0 = float(sig[0])
             lines.append(f"{'sigma (common)':<{lab}}{_cell_est(s0, W)}")
             if have_se:
@@ -368,7 +368,7 @@ class PanelMSARResults:
         lines.append(est_row("mu", mu))
         if have_se:
             lines.append(se_row(se_mu, pinned=pin_mu))
-        if self.switch_sigma:
+        if not self.common_sigma:
             sig_row = sig if sig.size == k else np.full(k, float(sig[0]))
             lines.append(est_row("sigma", sig_row))
             if have_se:
@@ -416,8 +416,9 @@ class PanelMSAR:
     common_rho : bool
         If True (default), one AR(1) persistence for every regime.
         If False, each regime has its own rho.
-    switch_sigma : bool
-        If True (default), sigma switches with the regime.
+    common_sigma : bool
+        If False (default), sigma switches with the regime.
+        If True, one sigma for every regime.
     min_t : int
         Drop countries shorter than this many *observations* (after keeping
         the longest spell). Not years — 8 is 8 quarters if the panel is
@@ -428,7 +429,7 @@ class PanelMSAR:
         self,
         n_regimes=3,
         common_rho=True,
-        switch_sigma=True,
+        common_sigma=False,
         min_t=8,
     ):
         if not isinstance(n_regimes, (int, np.integer)):
@@ -451,7 +452,7 @@ class PanelMSAR:
             )
         self.n_regimes = int(n_regimes)
         self.common_rho = bool(common_rho)
-        self.switch_sigma = bool(switch_sigma)
+        self.common_sigma = bool(common_sigma)
         self.min_t = int(min_t)
         self.res_ = None
 
@@ -642,7 +643,7 @@ class PanelMSAR:
         else:
             names += ["rho"]
         names += [f"mu[{s}]" for s in self._free_mu_indices()]
-        if self.switch_sigma:
+        if not self.common_sigma:
             names += [f"sigma[{s}]" for s in range(k)]
         else:
             names += ["sigma"]
@@ -677,7 +678,7 @@ class PanelMSAR:
             mu[s] = theta[i]
             i += 1
 
-        if self.switch_sigma:
+        if not self.common_sigma:
             sig = np.exp(theta[i:i + k])
             i += k
         else:
@@ -698,7 +699,7 @@ class PanelMSAR:
         else:
             th += [np.arctanh(np.clip(float(np.mean(rho)), -0.99, 0.99))]
         th += [float(mu[s]) for s in self._free_mu_indices()]
-        if self.switch_sigma:
+        if not self.common_sigma:
             th += [float(np.log(s)) for s in sig]
         else:
             th += [float(np.log(np.mean(sig)))]
@@ -870,7 +871,7 @@ class PanelMSAR:
             mu_se[s] = raw[f"mu[{s}]"]
         out["mu"] = mu_se
 
-        if self.switch_sigma:
+        if not self.common_sigma:
             out["sigma"] = np.array([
                 raw[f"sigma[{s}]"] * float(p["sigma"][s]) for s in range(k)
             ])
@@ -1037,7 +1038,7 @@ class PanelMSAR:
                 filtered[cid] = pd.DataFrame(out)
 
         rho_out = float(p["rho"][0]) if self.common_rho else p["rho"]
-        sig_out = p["sigma"] if self.switch_sigma else float(p["sigma"][0])
+        sig_out = float(p["sigma"][0]) if self.common_sigma else p["sigma"]
         params = {
             "P": p["P"],
             "rho": rho_out,
@@ -1070,7 +1071,7 @@ class PanelMSAR:
             warnings=warnings,
             has_numba=HAS_NUMBA,
             common_rho=self.common_rho,
-            switch_sigma=self.switch_sigma,
+            common_sigma=self.common_sigma,
         )
         return self.res_
 

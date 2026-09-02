@@ -24,7 +24,7 @@ Countries are independent given shared `theta`. Likelihood: Hamilton filter per 
 | Regimes `k` | Odd (`1, 3, 5, …`) so a unique median regime exists. `k` is specified, not selected. |
 | Mean restriction | After estimation, regimes are ordered by `mu` and shifted so `mu[k//2] = 0`. The shift is absorbed into `a`. |
 | Persistence | One `rho` for all regimes (`common_rho=True`). |
-| Variance | `sigma(s)` switches with the regime (`switch_sigma=True`). |
+| Variance | `sigma(s)` switches with the regime (`common_sigma=False`). |
 | Transitions | Common `Pi`. Latent path `s_it` is country-specific. |
 | Timing | Regime dated `t` governs the transition from `z_t` to `z_{t+1}`; then a new regime is drawn. |
 | Initial condition | `z_1 \| s_1 ~ N(mu_s, sigma_s^2 / (1-rho_s^2))`, `s_1` from the ergodic distribution of `Pi`. |
@@ -52,7 +52,7 @@ Internally `t` is shifted so the earliest sample date is 0 (`res.time_base`, `re
 ```python
 from panel_msar import PanelMSAR
 
-mod = PanelMSAR(n_regimes=3, common_rho=True, switch_sigma=True, min_t=12)
+mod = PanelMSAR(n_regimes=3, common_rho=True, common_sigma=False, min_t=12)
 res = mod.fit(df["country"], df["time"], df["y"], n_starts=8, maxiter=400)
 print(res)                 # regime table + Pi; SEs in parentheses underneath
 res.params                 # rho, mu, sigma, P; a and g are estimated but nuisance
