@@ -511,10 +511,10 @@ class PanelMSAR:
         y_keep = df["y"].to_numpy()
         if np.nanmedian(np.abs(y_keep)) > 20 or np.nanmax(np.abs(y_keep)) > 50:
             warnings.append(
-                "y looks large for log labor productivity "
+                "y looks large for a log series "
                 f"(median |y|={np.nanmedian(np.abs(y_keep)):.3g}, "
                 f"max |y|={np.nanmax(np.abs(y_keep)):.3g}). "
-                "The model expects log y, not levels."
+                "The model is specified for log y, not levels."
             )
 
         for cid, g in df.groupby("country", sort=True):
@@ -965,7 +965,7 @@ class PanelMSAR:
         if best is None:
             raise RuntimeError(
                 "Optimization failed on every start (no finite likelihood). "
-                "Check that y is log productivity, time is calendar time "
+                "Check that y is in logs, time is calendar time "
                 "on a common origin, and the panel is not constant."
             )
 

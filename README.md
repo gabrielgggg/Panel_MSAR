@@ -1,6 +1,6 @@
 # Panel MS-AR(1) around a common log-linear trend
 
-Joint MLE of one model on an unbalanced country panel of log labor productivity. Shared parameters; country-specific latent regimes. No country intercepts.
+Joint MLE of one model on an unbalanced country panel. Shared parameters; country-specific latent regimes. No country intercepts. `y` can be any series; logs are the intended scale.
 
 ## Model
 
@@ -17,7 +17,7 @@ Countries are independent given shared `theta`. Likelihood: Hamilton filter per 
 
 | Piece | Specification |
 |---|---|
-| Outcome `y` | Log labor productivity. |
+| Outcome `y` | Any series; ideally in logs. |
 | Trend | Common intercept `a` and common slope `g`. |
 | Time `t` | Calendar time, **common origin** for every country. Any regular frequency. `g` is per unit of this scale; `rho` is per observation. |
 | Country intercepts | None. Permanent level differences load on the cycle / regimes. |
@@ -40,7 +40,7 @@ Countries are independent given shared `theta`. Likelihood: Hamilton filter per 
 
 ## Data and API
 
-Pass `country`, `time`, `y` (log productivity). `time` must share one calendar origin, not periods-since-entry.
+Pass `country`, `time`, `y` (ideally in logs). `time` must share one calendar origin, not periods-since-entry.
 
 - Year-fraction, e.g. quarterly `1970.0, 1970.25, …`: `g` per year, `rho` per quarter.
 - Datetimes / pandas `Period`s: converted to `year + (month-1)/12`.
