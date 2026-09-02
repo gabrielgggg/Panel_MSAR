@@ -4,33 +4,32 @@ Joint MLE of one model on an unbalanced country panel. Shared parameters; countr
 
 ## Model
 
-```
-y_it = a + g * t + z_it
+$$
+\begin{aligned}
+y_{it} &= a + g\, t + z_{it}, \\
+z_{i,t+1} &= \bigl(1-\rho(s_{it})\bigr)\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}, \\
+s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}).
+\end{aligned}
+$$
 
-z_{i,t+1} = (1 - rho(s_it)) * mu(s_it) + rho(s_it) * z_it
-            + sigma(s_it) * eps_it
-
-s_{i,t+1} ~ Pi( . | s_it )
-```
-
-Countries are independent given shared `theta`. Likelihood: Hamilton filter per country, sum log-likelihoods.
+Countries are independent given shared $\theta$. Likelihood: Hamilton filter per country, sum log-likelihoods.
 
 | Piece | Specification |
 |---|---|
-| Outcome `y` | Any series; ideally in logs. |
-| Trend | Common intercept `a` and common slope `g`. |
-| Time `t` | Calendar time, **common origin** for every country. Any regular frequency. `g` is per unit of this scale; `rho` is per observation. |
+| Outcome $y$ | Any series; ideally in logs. |
+| Trend | Common intercept $a$ and common slope $g$. |
+| Time $t$ | Calendar time, **common origin** for every country. Any regular frequency. $g$ is per unit of this scale; $\rho$ is per observation. |
 | Country intercepts | None. Permanent level differences load on the cycle / regimes. |
-| Regimes `k` | Odd (`1, 3, 5, …`) so a unique median regime exists. `k` is specified, not selected. |
-| Mean restriction | After estimation, regimes are ordered by `mu` and shifted so `mu[k//2] = 0`. The shift is absorbed into `a`. |
-| Persistence | One `rho` for all regimes (`common_rho=True`). |
-| Variance | `sigma(s)` switches with the regime (`common_sigma=False`). |
-| Transitions | Common `Pi`. Latent path `s_it` is country-specific. |
-| Timing | Regime dated `t` governs the transition from `z_t` to `z_{t+1}`; then a new regime is drawn. |
-| Initial condition | `z_1 \| s_1 ~ N(mu_s, sigma_s^2 / (1-rho_s^2))`, `s_1` from the ergodic distribution of `Pi`. |
+| Regimes $k$ | Odd ($1, 3, 5, \ldots$) so a unique median regime exists. $k$ is specified, not selected. |
+| Mean restriction | After estimation, regimes are ordered by $\mu$ and shifted so $\mu_{\lfloor k/2\rfloor}=0$. The shift is absorbed into $a$. |
+| Persistence | One $\rho$ for all regimes (`common_rho=True`). |
+| Variance | $\sigma(s)$ switches with the regime (`common_sigma=False`). |
+| Transitions | Common $\Pi$. Latent path $s_{it}$ is country-specific. |
+| Timing | Regime dated $t$ governs the transition from $z_t$ to $z_{t+1}$; then a new regime is drawn. |
+| Initial condition | $z_1 \mid s_1 \sim N\bigl(\mu_s,\, \sigma_s^2/(1-\rho_s^2)\bigr)$, with $s_1$ from the ergodic distribution of $\Pi$. |
 | Sample | Unbalanced panel. Drop countries with fewer than `min_t` **observations**. Calendar gaps: keep the longest contiguous spell (no interpolation). |
 
-`a` and the regime means are collinear without the median-mean pin. Without country FE, a country that stays below the common path looks like the low-`mu` regime; that is the model.
+$a$ and the regime means are collinear without the median-mean pin. Without country FE, a country that stays below the common path looks like the low-$\mu$ regime; that is the model.
 
 ## Estimator
 
