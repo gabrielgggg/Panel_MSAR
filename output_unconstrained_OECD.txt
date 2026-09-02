@@ -1,0 +1,37 @@
+Demo OECD log real GDP per worker  countries=34  obs=6784  1960-Q1–2025-Q4
+n_regimes=3  common_rho=False  common_sigma=False
+  start 1/8: nll=-20880.9949  success=True  CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+  start 2/8: nll=-20392.0494  success=True  CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+  start 3/8: nll=-20879.1884  success=True  CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+  start 4/8: nll=-20884.4485  success=False  STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT
+  start 5/8: nll=-20541.9251  success=True  CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+  start 6/8: nll=-20941.8735  success=True  CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+  start 7/8: nll=-20169.0774  success=True  CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+  start 8/8: nll=-15916.0116  success=True  CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+
+Joint panel MS-AR(1) + common log-linear trend
+Regimes: 3    Countries: 34    Observations: 6784
+Log-likelihood: 20964.2333
+Converged: True    CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+
+Regimes ordered by mu; median regime 1 has mu pinned at 0.
+g                   0.0125
+                  (0.0003)
+
+Regime parameters
+                         0           1           2
+mu                 -0.3683      0.0000      0.8846
+                  (0.0668)         (—)    (0.0199)
+sigma               0.0394      0.0056      0.0115
+                  (0.0015)    (0.0002)    (0.0001)
+rho                 0.9900      0.9900      0.9900
+                  (0.0010)    (0.0003)    (0.0001)
+
+Transition matrix Pi [from \ to]
+                         0           1           2
+from 0              0.7865      0.0172      0.1962
+                  (0.0232)    (0.0071)    (0.0229)
+from 1              0.0165      0.9570      0.0265
+                  (0.0035)    (0.0093)            
+from 2              0.0323      0.0405      0.9272
+                  (0.0037)    (0.0044)    (0.0051)
