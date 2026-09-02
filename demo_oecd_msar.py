@@ -43,10 +43,13 @@ def main():
         f"{df.period.max() if 'period' in df.columns else ''}"
     )
 
+    out_pdf = Path(__file__).resolve().parent / "data" / "demo_oecd_log_gdp_per_worker_detrended.pdf"
     mod = PanelMSAR(
         n_regimes=3,
         common_rho=True,
         common_sigma=False,
+        country_intercepts=False,
+        country_trends=False,
         min_t=24,
     )
     res = mod.fit(
@@ -59,9 +62,11 @@ def main():
         compute_se=True,
         store_filtered=True,
         verbose=True,
+        detrend_pdf=str(out_pdf),
     )
     print()
     print(res)
+    print(f"\nDetrended PDF: {out_pdf}")
 
 
 if __name__ == "__main__":

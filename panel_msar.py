@@ -8,11 +8,12 @@ Joint panel Markov-switching AR(1) around a common log-linear trend.
 
     s_{i,t+1} ~ Markov(P | s_it)
 
-No country intercepts. n_regimes must be odd so a unique median regime
-exists. After estimation, regimes are ordered by mean and shifted so
-mu[k//2] = 0 (the shift is absorbed into a). Countries are independent
-given shared parameters; latent regimes are country-specific. The panel
-may be unbalanced.
+n_regimes must be odd so a unique median regime exists. After estimation,
+regimes are ordered by mean and shifted so mu[k//2] = 0 (the shift is
+absorbed into a or the a_i). Optional country intercepts a_i and/or
+country slopes g_i are profiled out of the joint likelihood. Countries
+are independent given shared parameters; latent regimes are
+country-specific. The panel may be unbalanced.
 
 Timing: the regime dated t governs the transition from z_t to z_{t+1};
 then a new regime is drawn.
@@ -30,7 +31,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
+from scipy.optimize import minimize, minimize_scalar
 from scipy.special import logsumexp
 
 try:
@@ -302,6 +303,8 @@ class PanelMSARResults:
     has_numba: bool = HAS_NUMBA
     common_rho: bool = True
     common_sigma: bool = False
+    country_intercepts: bool = False
+    country_trends: bool = False
 
     def summary(self) -> str:
         k = self.n_regimes
@@ -350,11 +353,24 @@ class PanelMSARResults:
             "",
             f"Regimes ordered by mu; median regime {mid} has mu pinned at 0.",
         ]
-        g = float(pr["g"])
-        se_g = se.get("g") if have_se else None
-        lines.append(f"{'g':<{lab}}{_cell_est(g, W)}")
-        if have_se:
-            lines.append(f"{'':<{lab}}{_cell_se(se_g, W)}")
+        if self.country_intercepts:
+            aa = np.array(list(pr["a"].values()) if isinstance(pr["a"], dict) else [pr["a"]], dtype=float)
+            lines.append(
+                f"{'a (country)':<{lab}}mean={aa.mean():.4f}  "
+                f"min={aa.min():.4f}  max={aa.max():.4f}"
+            )
+        if self.country_trends:
+            gg = np.array(list(pr["g"].values()) if isinstance(pr["g"], dict) else [pr["g"]], dtype=float)
+            lines.append(
+                f"{'g (country)':<{lab}}mean={gg.mean():.4f}  "
+                f"min={gg.min():.4f}  max={gg.max():.4f}"
+            )
+        else:
+            g = float(pr["g"])
+            se_g = se.get("g") if have_se else None
+            lines.append(f"{'g':<{lab}}{_cell_est(g, W)}")
+            if have_se:
+                lines.append(f"{'':<{lab}}{_cell_se(se_g, W)}")
         if self.common_rho:
             r = float(rho[0])
             lines.append(f"{'rho (common)':<{lab}}{_cell_est(r, W)}")
@@ -408,9 +424,48 @@ class PanelMSARResults:
     def __str__(self):
         return self.summary()
 
+    def plot_detrended(self, path, title=None):
+        """Write a PDF of country cycles z_it = y_it - a_i - g_i t."""
+        if not self.filtered_probs:
+            raise RuntimeError(
+                "No stored cycles. Call fit(..., store_filtered=True) "
+                "or pass detrend_pdf= to fit()."
+            )
+        import matplotlib.pyplot as plt
+
+        ids = [cid for cid in self.country_ids if cid in self.filtered_probs]
+        n = len(ids)
+        cmap1 = plt.colormaps["tab20"]
+        cmap2 = plt.colormaps["tab20b"]
+        colors = [cmap1(i) for i in range(min(n, 20))]
+        if n > 20:
+            colors += [cmap2(i) for i in range(n - 20)]
+        fig, ax = plt.subplots(figsize=(11, 6.5))
+        for i, cid in enumerate(ids):
+            d = self.filtered_probs[cid]
+            ax.plot(d["time"], d["cycle"], color=colors[i], lw=1.15, alpha=0.9, label=str(cid))
+        ax.axhline(0.0, color="k", lw=0.6, alpha=0.5)
+        ax.set_xlabel("Year")
+        ax.set_ylabel("cycle (common or country trend removed)")
+        if title is None:
+            bits = []
+            bits.append("a_i" if self.country_intercepts else "common a")
+            bits.append("g_i" if self.country_trends else "common g")
+            title = "Detrended series (" + ", ".join(bits) + ")"
+        ax.set_title(title)
+        ax.grid(True, alpha=0.3)
+        ax.legend(
+            ncol=2, fontsize=7, loc="center left",
+            bbox_to_anchor=(1.01, 0.5), frameon=False, borderaxespad=0,
+        )
+        fig.tight_layout()
+        fig.savefig(path, format="pdf", bbox_inches="tight")
+        plt.close(fig)
+        return path
+
 
 class PanelMSAR:
-    """Joint MLE: common intercept + common trend + panel MS-AR(1) cycle.
+    """Joint MLE: log-linear trend + panel MS-AR(1) cycle.
 
     Parameters
     ----------
@@ -424,6 +479,12 @@ class PanelMSAR:
     common_sigma : bool
         If False (default), sigma switches with the regime.
         If True, one sigma for every regime.
+    country_intercepts : bool
+        If True, each country has its own intercept a_i (profiled).
+        If False (default), one common a.
+    country_trends : bool
+        If True, each country has its own slope g_i (profiled).
+        If False (default), one common g.
     min_t : int
         Drop countries shorter than this many *observations* (after keeping
         the longest spell). Not years — 8 is 8 quarters if the panel is
@@ -435,6 +496,8 @@ class PanelMSAR:
         n_regimes=3,
         common_rho=True,
         common_sigma=False,
+        country_intercepts=False,
+        country_trends=False,
         min_t=8,
     ):
         if not isinstance(n_regimes, (int, np.integer)):
@@ -458,8 +521,12 @@ class PanelMSAR:
         self.n_regimes = int(n_regimes)
         self.common_rho = bool(common_rho)
         self.common_sigma = bool(common_sigma)
+        self.country_intercepts = bool(country_intercepts)
+        self.country_trends = bool(country_trends)
         self.min_t = int(min_t)
         self.res_ = None
+        self._ols = None
+        self._ag_cache = None
 
     def _prepare(self, country, time, y):
         country = _as_1d("country", country)
@@ -652,7 +719,10 @@ class PanelMSAR:
             names += [f"sigma[{s}]" for s in range(k)]
         else:
             names += ["sigma"]
-        names += ["g", "a"]
+        if not self.country_trends:
+            names += ["g"]
+        if not self.country_intercepts:
+            names += ["a"]
         return names
 
     def _unpack(self, theta):
@@ -684,14 +754,21 @@ class PanelMSAR:
             i += 1
 
         if not self.common_sigma:
-            sig = np.exp(theta[i:i + k])
+            sig = np.exp(np.clip(theta[i:i + k], -20.0, 5.0))
             i += k
         else:
-            sig = np.full(k, np.exp(theta[i]))
+            sig = np.full(k, np.exp(np.clip(theta[i], -20.0, 5.0)))
             i += 1
 
-        g = theta[i]
-        a = theta[i + 1]
+        if not self.country_trends:
+            g = theta[i]
+            i += 1
+        else:
+            g = 0.0
+        if not self.country_intercepts:
+            a = theta[i]
+        else:
+            a = 0.0
         return {"P": P, "rho": rho, "mu": mu, "sigma": sig, "g": g, "a": a}
 
     def _pack_from_dicts(self, P, rho, mu, sig, g, a):
@@ -708,7 +785,10 @@ class PanelMSAR:
             th += [float(np.log(s)) for s in sig]
         else:
             th += [float(np.log(np.mean(sig)))]
-        th += [float(g), float(a)]
+        if not self.country_trends:
+            th += [float(g)]
+        if not self.country_intercepts:
+            th += [float(a)]
         return np.asarray(th, dtype=float)
 
     def _stack_panels(self, panels):
@@ -719,19 +799,139 @@ class PanelMSAR:
         tcat = np.concatenate([t for _, t in panels]).astype(np.float64)
         return ycat, tcat, lengths, offsets
 
+    @staticmethod
+    def _ols_ag(y, t):
+        X = np.column_stack([np.ones(len(y)), t])
+        beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+        return float(beta[0]), float(beta[1])
+
+    def _country_nll_ag(self, a, g, y, t, rho, mu, sig, P, pi0):
+        z = y - a - g * t
+        try:
+            ll = _country_ll_nb(z, rho, mu, sig, P, pi0)
+        except Exception:
+            return 1e12
+        if not np.isfinite(ll):
+            return 1e12
+        return -float(ll)
+
+    def _brent_1d(self, fun, x0, half_width):
+        lo, hi = float(x0) - half_width, float(x0) + half_width
+        if lo > hi:
+            lo, hi = hi, lo
+        try:
+            opt = minimize_scalar(
+                fun, bounds=(lo, hi), method="bounded",
+                options={"xatol": 1e-8, "maxiter": 40},
+            )
+            if np.isfinite(opt.fun):
+                return float(opt.x)
+        except Exception:
+            pass
+        return float(x0)
+
+    def _newton_2d(self, y, t, rho, mu, sig, P, pi0, a0, g0):
+        a, g = float(a0), float(g0)
+
+        def f(aa, gg):
+            return self._country_nll_ag(aa, gg, y, t, rho, mu, sig, P, pi0)
+
+        f0 = f(a, g)
+        for _ in range(8):
+            ea = 1e-5 * (1.0 + abs(a))
+            eg = 1e-6 * (1.0 + abs(g))
+            f_ap, f_am = f(a + ea, g), f(a - ea, g)
+            f_gp, f_gm = f(a, g + eg), f(a, g - eg)
+            da = (f_ap - f_am) / (2.0 * ea)
+            dg = (f_gp - f_gm) / (2.0 * eg)
+            haa = (f_ap - 2.0 * f0 + f_am) / (ea ** 2)
+            hgg = (f_gp - 2.0 * f0 + f_gm) / (eg ** 2)
+            hag = (f(a + ea, g + eg) - f_ap - f_gp + f0) / (ea * eg)
+            H = np.array([[haa, hag], [hag, hgg]], dtype=float)
+            grad = np.array([da, dg], dtype=float)
+            try:
+                step = np.linalg.solve(H, grad)
+            except np.linalg.LinAlgError:
+                break
+            if not np.all(np.isfinite(step)):
+                break
+            improved = False
+            for lam in (1.0, 0.5, 0.25, 0.1):
+                a2, g2 = a - lam * step[0], g - lam * step[1]
+                f2 = f(a2, g2)
+                if f2 < f0 - 1e-12:
+                    a, g, f0 = a2, g2, f2
+                    improved = True
+                    break
+            if (not improved) or (abs(step[0]) + abs(step[1]) < 1e-10):
+                break
+        return a, g, f0
+
+    def _profile_one(self, y, t, p, pi0, a0, g0):
+        """Max country ll over free a_i and/or g_i. Returns ll, a, g."""
+        fix_a = None if self.country_intercepts else float(p["a"])
+        fix_g = None if self.country_trends else float(p["g"])
+        rho = np.ascontiguousarray(p["rho"], dtype=np.float64)
+        mu = np.ascontiguousarray(p["mu"], dtype=np.float64)
+        sig = np.ascontiguousarray(p["sigma"], dtype=np.float64)
+        P = np.ascontiguousarray(p["P"], dtype=np.float64)
+        y = np.ascontiguousarray(y, dtype=np.float64)
+        t = np.ascontiguousarray(t, dtype=np.float64)
+
+        if fix_a is not None and fix_g is not None:
+            nll = self._country_nll_ag(fix_a, fix_g, y, t, rho, mu, sig, P, pi0)
+            return -nll, fix_a, fix_g
+
+        if fix_a is None and fix_g is not None:
+            def fa(a):
+                return self._country_nll_ag(a, fix_g, y, t, rho, mu, sig, P, pi0)
+            a = self._brent_1d(fa, a0, half_width=5.0)
+            return -fa(a), a, fix_g
+
+        if fix_g is None and fix_a is not None:
+            def fg(g):
+                return self._country_nll_ag(fix_a, g, y, t, rho, mu, sig, P, pi0)
+            g = self._brent_1d(fg, g0, half_width=0.15)
+            return -fg(g), fix_a, g
+
+        a, g, nll = self._newton_2d(y, t, rho, mu, sig, P, pi0, a0, g0)
+        return -nll, a, g
+
+    def _profile_all(self, theta, packed):
+        ycat, tcat, lengths, offsets = packed
+        p = self._unpack(theta)
+        pi0 = _stationary_probs(p["P"]).astype(np.float64)
+        n = int(lengths.shape[0])
+        a_hat = np.empty(n)
+        g_hat = np.empty(n)
+        ll = 0.0
+        starts = self._ag_cache if self._ag_cache is not None else self._ols
+        for i in range(n):
+            sl = slice(int(offsets[i]), int(offsets[i] + lengths[i]))
+            a0, g0 = starts[i]
+            lli, ai, gi = self._profile_one(ycat[sl], tcat[sl], p, pi0, a0, g0)
+            ll += lli
+            a_hat[i] = ai
+            g_hat[i] = gi
+        self._ag_cache = list(zip(a_hat.tolist(), g_hat.tolist()))
+        return ll, a_hat, g_hat, p
+
     def _nll(self, theta, packed):
         ycat, tcat, lengths, offsets = packed
         p = self._unpack(theta)
         pi0 = _stationary_probs(p["P"]).astype(np.float64)
-        zcat = ycat - p["a"] - p["g"] * tcat
-        ll = _panel_ll_nb(
-            zcat, lengths, offsets,
-            np.ascontiguousarray(p["rho"], dtype=np.float64),
-            np.ascontiguousarray(p["mu"], dtype=np.float64),
-            np.ascontiguousarray(p["sigma"], dtype=np.float64),
-            np.ascontiguousarray(p["P"], dtype=np.float64),
-            pi0,
-        )
+        if not self.country_intercepts and not self.country_trends:
+            zcat = ycat - p["a"] - p["g"] * tcat
+            ll = _panel_ll_nb(
+                zcat, lengths, offsets,
+                np.ascontiguousarray(p["rho"], dtype=np.float64),
+                np.ascontiguousarray(p["mu"], dtype=np.float64),
+                np.ascontiguousarray(p["sigma"], dtype=np.float64),
+                np.ascontiguousarray(p["P"], dtype=np.float64),
+                pi0,
+            )
+        else:
+            ll, _, _, _ = self._profile_all(theta, packed)
         if not np.isfinite(ll):
             return 1e12
         return -float(ll)
@@ -742,12 +942,24 @@ class PanelMSAR:
         X = np.column_stack([np.ones(len(ys)), ts])
         beta, *_ = np.linalg.lstsq(X, ys, rcond=None)
         a0, g0 = float(beta[0]), float(beta[1])
-        resid = ys - a0 - g0 * ts
+        if self.country_intercepts or self.country_trends:
+            pieces = []
+            for y, t in panels:
+                ai, gi = self._ols_ag(y, t)
+                a_use = ai if self.country_intercepts else a0
+                g_use = gi if self.country_trends else g0
+                pieces.append(y - a_use - g_use * t)
+            resid = np.concatenate(pieces)
+        else:
+            resid = ys - a0 - g0 * ts
         s_hat = float(np.std(resid, ddof=1)) or 0.05
 
         rhos = []
         for y, t in panels:
-            z = y - a0 - g0 * t
+            ai, gi = self._ols_ag(y, t)
+            a_use = ai if self.country_intercepts else a0
+            g_use = gi if self.country_trends else g0
+            z = y - a_use - g_use * t
             if z.size < 4:
                 continue
             zc = z - z.mean()
@@ -860,7 +1072,11 @@ class PanelMSAR:
         raw = {n: float(s) for n, s in zip(names, se_raw)}
         p = self._unpack(theta)
         k = self.n_regimes
-        out = {"a": raw["a"], "g": raw["g"]}
+        out = {}
+        if "a" in raw:
+            out["a"] = raw["a"]
+        if "g" in raw:
+            out["g"] = raw["g"]
 
         if not self.common_rho:
             out["rho"] = np.array([
@@ -896,6 +1112,7 @@ class PanelMSAR:
         compute_se=True,
         store_filtered=True,
         verbose=False,
+        detrend_pdf=None,
     ):
         if not isinstance(n_starts, (int, np.integer)) or int(n_starts) < 1:
             raise ValueError(f"n_starts must be a positive integer (got {n_starts!r}).")
@@ -942,6 +1159,8 @@ class PanelMSAR:
 
         rng = np.random.default_rng(seed)
         packed = self._stack_panels(panels)
+        self._ols = [self._ols_ag(y, t) for y, t in panels]
+        self._ag_cache = None
         _warmup_numba()
         starts = self._starting_values(panels, n_starts, rng)
         best, best_fun, best_msg, best_ok = None, np.inf, "", False
@@ -959,7 +1178,8 @@ class PanelMSAR:
             if verbose:
                 print(
                     f"  start {i + 1}/{n_starts}: nll={opt.fun:.4f}  "
-                    f"success={opt.success}  {opt.message}"
+                    f"success={opt.success}  {opt.message}",
+                    flush=True,
                 )
             if opt.fun < best_fun:
                 best_fun = float(opt.fun)
@@ -1000,6 +1220,7 @@ class PanelMSAR:
         p = self._unpack(best)
         names = self.param_names()
         ll = -best_fun
+        _, a_hat, g_hat, p = self._profile_all(best, packed)
         if compute_se:
             stderr, cov = self._stderr(best, packed)
             se_params = self._se_transformed(best, stderr, cov)
@@ -1029,11 +1250,13 @@ class PanelMSAR:
                 "one sigma may have exploded."
             )
 
+        if detrend_pdf:
+            store_filtered = True
         filtered = {}
         if store_filtered:
             pi0 = _stationary_probs(p["P"])
-            for cid, (yy, tt) in zip(ids, panels):
-                z = yy - p["a"] - p["g"] * tt
+            for i, (cid, (yy, tt)) in enumerate(zip(ids, panels)):
+                z = yy - a_hat[i] - g_hat[i] * tt
                 _, filt = _country_loglik(
                     z, p["rho"], p["mu"], p["sigma"], p["P"], pi0, return_filter=True
                 )
@@ -1044,13 +1267,21 @@ class PanelMSAR:
 
         rho_out = float(p["rho"][0]) if self.common_rho else p["rho"]
         sig_out = float(p["sigma"][0]) if self.common_sigma else p["sigma"]
+        if self.country_intercepts:
+            a_out = {cid: float(a_hat[i]) for i, cid in enumerate(ids)}
+        else:
+            a_out = float(a_hat[0])
+        if self.country_trends:
+            g_out = {cid: float(g_hat[i]) for i, cid in enumerate(ids)}
+        else:
+            g_out = float(g_hat[0])
         params = {
             "P": p["P"],
             "rho": rho_out,
             "mu": p["mu"],
             "sigma": sig_out,
-            "g": float(p["g"]),
-            "a": float(p["a"]),
+            "g": g_out,
+            "a": a_out,
         }
 
         self.res_ = PanelMSARResults(
@@ -1077,7 +1308,11 @@ class PanelMSAR:
             has_numba=HAS_NUMBA,
             common_rho=self.common_rho,
             common_sigma=self.common_sigma,
+            country_intercepts=self.country_intercepts,
+            country_trends=self.country_trends,
         )
+        if detrend_pdf:
+            self.res_.plot_detrended(detrend_pdf)
         return self.res_
 
     def _stderr(self, theta, panels):

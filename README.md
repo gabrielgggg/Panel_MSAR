@@ -1,27 +1,29 @@
 # Panel MS-AR(1) around a common log-linear trend
 
-Joint MLE of one model on an unbalanced country panel. Shared parameters; country-specific latent regimes. No country intercepts. `y` can be any series; logs are the intended scale.
+Joint MLE of one model on an unbalanced country panel. Shared Markov parameters; country-specific latent regimes. Optional country intercepts $a_i$ and/or slopes $g_i$. `y` can be any series; logs are the intended scale.
 
 ## Model
 
 $$
 \begin{aligned}
-y_{it} &= a + g\, t + z_{it}, \\
+y_{it} &= a_i + g_i\, t + z_{it}, \\
 z_{i,t+1} &= \bigl(1-\rho(s_{it})\bigr)\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}, \\
 s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}).
 \end{aligned}
 $$
+
+$a_i$ and $g_i$ may be common ($a$, $g$) or country-specific, independently.
 
 Countries are independent given shared $\theta$. Likelihood: Hamilton filter per country, sum log-likelihoods.
 
 | Piece | Specification |
 |---|---|
 | Outcome $y$ | Any series; ideally in logs. |
-| Trend | Common intercept $a$ and common slope $g$. |
-| Time $t$ | Calendar time, **common origin** for every country. Any regular frequency. $g$ is per unit of this scale; $\rho$ is per observation. |
-| Country intercepts | None. Permanent level differences load on the cycle / regimes. |
+| Trend | Common $g$ (`country_trends=False`) or country-specific $g_i$ (`True`). $g$ is per unit of calendar time; $\rho$ is per observation. |
+| Time $t$ | Calendar time, **common origin** for every country. Any regular frequency. |
+| Country intercepts | Off by default (`country_intercepts=False`). If off, permanent level differences load on the cycle / regimes. |
 | Regimes $k$ | Odd ($1, 3, 5, \ldots$) so a unique median regime exists. $k$ is specified, not selected. |
-| Mean restriction | After estimation, regimes are ordered by $\mu$ and shifted so $\mu_{\lfloor k/2\rfloor}=0$. The shift is absorbed into $a$. |
+| Mean restriction | After estimation, regimes are ordered by $\mu$ and shifted so $\mu_{\lfloor k/2\rfloor}=0$. The shift is absorbed into $a$ or the $a_i$. |
 | Persistence | One $\rho$ for all regimes (`common_rho=True`). |
 | Variance | $\sigma(s)$ switches with the regime (`common_sigma=False`). |
 | Transitions | Common $\Pi$. Latent path $s_{it}$ is country-specific. |
@@ -29,7 +31,7 @@ Countries are independent given shared $\theta$. Likelihood: Hamilton filter per
 | Initial condition | $z_1 \mid s_1 \sim N\bigl(\mu_s,\, \sigma_s^2/(1-\rho_s^2)\bigr)$, with $s_1$ from the ergodic distribution of $\Pi$. |
 | Sample | Unbalanced panel. Drop countries with fewer than `min_t` **observations**. Calendar gaps: keep the longest contiguous spell (no interpolation). |
 
-$a$ and the regime means are collinear without the median-mean pin. Without country FE, a country that stays below the common path looks like the low-$\mu$ regime; that is the model.
+$a$ (or the $a_i$) and the regime means are collinear without the median-mean pin. Country intercepts and slopes are profiled out of the joint likelihood so they are not in the outer parameter vector.
 
 ## Estimator
 
@@ -53,11 +55,18 @@ Internally `t` is shifted so the earliest sample date is 0 (`res.time_base`, `re
 ```python
 from panel_msar import PanelMSAR
 
-mod = PanelMSAR(n_regimes=3, common_rho=True, common_sigma=False, min_t=12)
-res = mod.fit(df["country"], df["time"], df["y"], n_starts=8, maxiter=400)
+mod = PanelMSAR(
+    n_regimes=3, common_rho=True, common_sigma=False,
+    country_intercepts=False, country_trends=False, min_t=12,
+)
+res = mod.fit(
+    df["country"], df["time"], df["y"],
+    n_starts=8, maxiter=400, detrend_pdf="cycle.pdf",
+)
 print(res)                 # g, rho, regime table, Pi; SEs in parentheses underneath
-res.params                 # a, g, rho, mu, sigma, P
+res.params                 # a, g (scalar or dict), rho, mu, sigma, P
 res.filtered_probs[cid]    # time, cycle, p_regime0/1/2
+res.plot_detrended("cycle.pdf")
 ```
 
-Dependencies: `numpy`, `pandas`, `scipy`, `numba`.
+Dependencies: `numpy`, `pandas`, `scipy`, `numba`, `matplotlib`.

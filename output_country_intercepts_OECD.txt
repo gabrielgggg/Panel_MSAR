@@ -1,0 +1,40 @@
+Demo OECD log real GDP per worker  countries=34  obs=6784  1960-Q1–2025-Q4
+n_regimes=3  country_intercepts=True  country_trends=False  common_rho=False  common_sigma=False
+  start 1/8: nll=-19615.5972  success=True  CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+  start 2/8: nll=-4304.1990  success=True  CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+  start 3/8: nll=-19605.1984  success=False  ABNORMAL:
+  start 4/8: nll=-15386.6518  success=False  ABNORMAL:
+  start 5/8: nll=-8555.5590  success=False  ABNORMAL:
+  start 6/8: nll=-19574.8341  success=False  ABNORMAL:
+  start 7/8: nll=-20933.9434  success=True  CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+  start 8/8: nll=-21117.3737  success=False  ABNORMAL:
+
+Joint panel MS-AR(1) + common log-linear trend
+Regimes: 3    Countries: 34    Observations: 6784
+Log-likelihood: 21190.1660
+Converged: False    ABNORMAL:
+
+Regimes ordered by mu; median regime 1 has mu pinned at 0.
+a (country)   mean=10.8885  min=9.1331  max=12.1925
+g                   0.0078
+
+Regime parameters
+                         0           1           2
+mu                 -0.5102      0.0000      0.0614
+                  (0.0555)         (—)            
+sigma               0.0390      0.0050      0.0111
+                  (0.0014)    (0.0001)    (0.0002)
+rho                 0.9900      0.9863      0.9833
+                  (0.0011)    (0.0008)            
+
+Transition matrix Pi [from \ to]
+                         0           1           2
+from 0              0.8385      0.0727      0.0888
+                  (0.0203)    (0.0134)    (0.0168)
+from 1              0.0204      0.9401      0.0394
+                  (0.0042)    (0.0065)    (0.0064)
+from 2              0.0276      0.0326      0.9397
+                  (0.0044)    (0.0062)    (0.0068)
+
+Warnings:
+  - Optimizer did not report success (ABNORMAL: ). Estimates may still be usable; inspect the likelihood and try more starts.
