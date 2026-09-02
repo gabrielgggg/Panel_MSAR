@@ -23,7 +23,7 @@ Countries are independent given shared $\theta$. Likelihood: Hamilton filter per
 | Time $t$ | Calendar time, **common origin** for every country. Any regular frequency. |
 | Country intercepts | Off by default (`country_intercepts=False`). If off, permanent level differences load on the cycle / regimes. |
 | Regimes $k$ | Odd ($1, 3, 5, \ldots$) so a unique median regime exists. $k$ is specified, not selected. |
-| Mean restriction | After estimation, regimes are ordered by $\mu$ and shifted so $\mu_{\lfloor k/2\rfloor}=0$. The shift is absorbed into $a$ or the $a_i$. |
+| Mean restriction | After estimation, regimes are ordered by $\mu$ and shifted so $\mu_{\lfloor k/2\rfloor}=0$. The shift is absorbed into $a$ or the $a_i$. Set `zero_mu=True` to restrict **every** $\mu(s)=0$; regimes are then ordered by $\sigma$ (or $\rho$ if $\sigma$ is common). |
 | Persistence | One $\rho$ for all regimes (`common_rho=True`). |
 | Variance | $\sigma(s)$ switches with the regime (`common_sigma=False`). |
 | Transitions | Common $\Pi$. Latent path $s_{it}$ is country-specific. |
@@ -35,7 +35,7 @@ $a$ (or the $a_i$) and the regime means are collinear without the median-mean pi
 
 ## Estimator
 
-`panel_msar.py` (`PanelMSAR`). Multi-start L-BFGS-B on unconstrained parameters: row-wise softmax logits for `Pi` (`k(k-1)` free); `rho = tanh`; `sigma = exp`; free means are every `mu[s]` except `s = k//2`. After each successful fit, regimes are ordered by `mu` and the median mean is shifted into `a`. Numba Hamilton filter (install `numba`). Hessian SEs are on the unconstrained vector, then delta-method to the table; for a paper, bootstrap countries.
+`panel_msar.py` (`PanelMSAR`). Multi-start L-BFGS-B on unconstrained parameters: row-wise softmax logits for `Pi` (`k(k-1)` free); `rho = tanh`; `sigma = exp`; free means are every `mu[s]` except `s = k//2`, or none if `zero_mu=True`. After each successful fit, regimes are ordered by `mu` and the median mean is shifted into `a` (or ordered by `sigma` if all means are zero). Numba Hamilton filter (install `numba`). Hessian SEs are on the unconstrained vector, then delta-method to the table; for a paper, bootstrap countries.
 
 `demo_panel_msar.py` simulates a 3-regime DGP and recovers parameters.
 
@@ -58,7 +58,7 @@ from panel_msar import PanelMSAR
 mod = PanelMSAR(
     n_regimes=3, common_rho=True, common_sigma=False,
     country_intercepts=False, country_trends=False,
-    two_step=False, cf_cutoff=15, min_t=12,
+    two_step=False, cf_cutoff=15, zero_mu=False, min_t=12,
 )
 res = mod.fit(
     df["country"], df["time"], df["y"],

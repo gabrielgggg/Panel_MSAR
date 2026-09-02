@@ -10,10 +10,12 @@ Joint panel Markov-switching AR(1) around a common log-linear trend.
 
 n_regimes must be odd so a unique median regime exists. After estimation,
 regimes are ordered by mean and shifted so mu[k//2] = 0 (the shift is
-absorbed into a or the a_i). Optional country intercepts a_i and/or
-country slopes g_i are profiled out of the joint likelihood. Countries
-are independent given shared parameters; latent regimes are
-country-specific. The panel may be unbalanced.
+absorbed into a or the a_i), unless zero_mu=True, in which case every
+mu is restricted to 0 and regimes are ordered by sigma (or rho).
+Optional country intercepts a_i and/or country slopes g_i are profiled
+out of the joint likelihood. Countries are independent given shared
+parameters; latent regimes are country-specific. The panel may be
+unbalanced.
 
 Timing: the regime dated t governs the transition from z_t to z_{t+1};
 then a new regime is drawn.
@@ -330,6 +332,7 @@ class PanelMSARResults:
     two_step: object = False
     cf_cutoff: float = 0.0
     cf_high: float = 0.0
+    zero_mu: bool = False
 
     def summary(self) -> str:
         k = self.n_regimes
@@ -376,8 +379,16 @@ class PanelMSARResults:
             f"Log-likelihood: {self.loglik:.4f}",
             f"Converged: {self.success}    {self.message}",
             "",
-            f"Regimes ordered by mu; median regime {mid} has mu pinned at 0.",
         ]
+        if self.zero_mu:
+            lines.append(
+                "All regime means restricted to 0. "
+                "Regimes ordered by sigma (or rho if sigma is common)."
+            )
+        else:
+            lines.append(
+                f"Regimes ordered by mu; median regime {mid} has mu pinned at 0."
+            )
         if self.two_step == "cf":
             lines.append(
                 "Two-step: Christiano-Fitzgerald low-pass trend "
@@ -433,7 +444,10 @@ class PanelMSARResults:
         lines.append("Regime parameters")
         lines.append(header_regimes())
         pin_mu = np.zeros(k, dtype=bool)
-        pin_mu[mid] = True
+        if self.zero_mu:
+            pin_mu[:] = True
+        else:
+            pin_mu[mid] = True
         lines.append(est_row("mu", mu))
         if have_se:
             lines.append(se_row(se_mu, pinned=pin_mu))
@@ -559,6 +573,11 @@ class PanelMSAR:
         Only used when two_step='cf'. Length of the longest oscillation
         left in the cycle, in the same units as calendar time (years if
         time is year-fraction). Default 15.
+    zero_mu : bool
+        If True, every regime mean is restricted to 0 (no free mu in
+        the outer parameter vector). Regimes are then labeled by
+        increasing sigma, or by rho if sigma is common. If False
+        (default), only the median mean is pinned at 0 after ordering.
     min_t : int
         Drop countries shorter than this many *observations* (after keeping
         the longest spell). Not years — 8 is 8 quarters if the panel is
@@ -574,6 +593,7 @@ class PanelMSAR:
         country_trends=False,
         two_step=False,
         cf_cutoff=CF_CUTOFF_YEARS_DEFAULT,
+        zero_mu=False,
         min_t=8,
     ):
         if not isinstance(n_regimes, (int, np.integer)):
@@ -607,6 +627,7 @@ class PanelMSAR:
             raise ValueError(
                 f"cf_cutoff must be a positive number of years (got {cf_cutoff!r})."
             )
+        self.zero_mu = bool(zero_mu)
         self.min_t = int(min_t)
         self.res_ = None
         self._ols = None
@@ -789,6 +810,8 @@ class PanelMSAR:
         return self.n_regimes // 2
 
     def _free_mu_indices(self):
+        if self.zero_mu:
+            return []
         mid = self._mid_regime()
         return [s for s in range(self.n_regimes) if s != mid]
 
@@ -1195,7 +1218,7 @@ class PanelMSAR:
             return mu
 
         def one(g, a, rho, mu_spread, sigs, P, jitter=0.0):
-            mu = spread_mu(mu_spread)
+            mu = np.zeros(k) if self.zero_mu else spread_mu(mu_spread)
             th = self._pack_from_dicts(P, np.full(k, rho), mu, np.asarray(sigs, float), g, a)
             if jitter:
                 th = th + rng.normal(0.0, jitter, size=th.shape)
@@ -1227,9 +1250,25 @@ class PanelMSAR:
         return starts[:n_starts]
 
     def _order_regimes(self, theta):
-        """Permute so mu is increasing, then shift so the pinned mean is 0."""
+        """Permute so mu is increasing, then shift so the pinned mean is 0.
+
+        If zero_mu, every mean is already 0; permute by sigma (or rho).
+        """
         p = self._unpack(theta)
         k = self.n_regimes
+        if self.zero_mu:
+            if not self.common_sigma:
+                order = np.argsort(p["sigma"])
+            elif not self.common_rho:
+                order = np.argsort(p["rho"])
+            else:
+                order = np.arange(k)
+            mu = np.zeros(k)
+            rho = p["rho"][order]
+            sig = p["sigma"][order]
+            P = p["P"][np.ix_(order, order)]
+            self._last_mu_shift = 0.0
+            return self._pack_from_dicts(P, rho, mu, sig, p["g"], p["a"])
         order = np.argsort(p["mu"])
         mu = p["mu"][order]
         rho = p["rho"][order]
@@ -1292,9 +1331,12 @@ class PanelMSAR:
             out["rho"] = raw["rho"] * (1.0 - r ** 2)
 
         mu_se = np.full(k, np.nan)
-        mu_se[self._mid_regime()] = 0.0
-        for s in self._free_mu_indices():
-            mu_se[s] = raw[f"mu[{s}]"]
+        if self.zero_mu:
+            mu_se[:] = 0.0
+        else:
+            mu_se[self._mid_regime()] = 0.0
+            for s in self._free_mu_indices():
+                mu_se[s] = raw[f"mu[{s}]"]
         out["mu"] = mu_se
 
         if not self.common_sigma:
@@ -1491,7 +1533,7 @@ class PanelMSAR:
 
         mu = np.asarray(p["mu"])
         k = self.n_regimes
-        if k >= 3:
+        if k >= 3 and not self.zero_mu:
             gaps = np.diff(mu)
             free_near_zero = np.any(np.abs(mu[self._free_mu_indices()]) < 1e-3)
             if free_near_zero or np.any(gaps < 1e-3):
@@ -1585,6 +1627,7 @@ class PanelMSAR:
             two_step=self.two_step,
             cf_cutoff=float(self.cf_cutoff),
             cf_high=float(self._cf_high) if self._cf_high is not None else 0.0,
+            zero_mu=self.zero_mu,
         )
         if detrend_pdf:
             self.res_.plot_detrended(detrend_pdf)
