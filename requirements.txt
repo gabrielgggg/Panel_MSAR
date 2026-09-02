@@ -3,3 +3,4 @@ pandas>=2.0
 scipy>=1.10
 numba>=0.57
 matplotlib>=3.7
+statsmodels>=0.14

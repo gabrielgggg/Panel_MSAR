@@ -1,0 +1,32 @@
+Demo OECD log real GDP per worker  countries=34  obs=6784  1960-Q1–2025-Q4
+n_regimes=3  two_step=cf  cf_cutoff=15 years (60 quarters)  common_rho=False  common_sigma=False  compute_se=True
+
+Joint panel MS-AR(1) + common log-linear trend
+Regimes: 3    Countries: 34    Observations: 6784
+Log-likelihood: 21841.6078
+Converged: True    CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+
+Regimes ordered by mu; median regime 1 has mu pinned at 0.
+Two-step: Christiano-Fitzgerald low-pass trend (periods longer than 60 observations / 15 years), then MS-AR on the cycle.
+
+Regime parameters
+                         0           1           2
+mu                 -0.0054      0.0000      0.0001
+                  (0.0035)         (—)    (0.0014)
+sigma               0.0365      0.0049      0.0111
+                  (0.0016)    (0.0002)    (0.0004)
+rho                 0.5305      0.9165      0.8441
+                  (0.0422)    (0.0088)    (0.0125)
+
+Transition matrix Pi [from \ to]
+                         0           1           2
+from 0              0.7694      0.0008      0.2299
+                  (0.0319)    (0.0039)    (0.0322)
+from 1              0.0088      0.9528      0.0384
+                  (0.0033)    (0.0062)    (0.0071)
+from 2              0.0352      0.0470      0.9178
+                  (0.0066)    (0.0070)    (0.0093)
+
+Warnings:
+  - Two-step estimation: Christiano-Fitzgerald low-pass trend (cycle = periods 2–60 observations, cutoff 15 years) then MS-AR on the cycle. This is not a single joint MLE of the trend and the cycle.
+  - At least two regime means collapsed (gap < 1e-3 or a free mean near 0). Coefficient estimates for those regimes may not be separately identified.

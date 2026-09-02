@@ -50,6 +50,28 @@ except ImportError:
 
 LOG2PI = np.log(2.0 * np.pi)
 _NUMBA_WARMED = False
+# CF low-pass: cycle = periods 2..high; trend = slower than high.
+# 15 years is a standard "smooth growth trend" cutoff on quarterly data
+# (60 quarters). The CF/BK business-cycle band is 6–32; that is not used here.
+CF_CUTOFF_YEARS_DEFAULT = 15.0
+
+
+def _parse_two_step(two_step):
+    """False, True/'quadratic', or 'cf'."""
+    if two_step is False or two_step is None:
+        return False
+    if two_step is True:
+        return "quadratic"
+    if isinstance(two_step, str):
+        s = two_step.strip().lower()
+        if s in ("quadratic", "quad", "ols"):
+            return "quadratic"
+        if s in ("cf", "cffilter", "christiano-fitzgerald", "christiano_fitzgerald"):
+            return "cf"
+    raise ValueError(
+        "two_step must be False, True, 'quadratic', or 'cf' "
+        f"(got {two_step!r})."
+    )
 
 
 def _softmax_rows(logits):
@@ -305,7 +327,9 @@ class PanelMSARResults:
     common_sigma: bool = False
     country_intercepts: bool = False
     country_trends: bool = False
-    two_step: bool = False
+    two_step: object = False
+    cf_cutoff: float = 0.0
+    cf_high: float = 0.0
 
     def summary(self) -> str:
         k = self.n_regimes
@@ -354,30 +378,36 @@ class PanelMSARResults:
             "",
             f"Regimes ordered by mu; median regime {mid} has mu pinned at 0.",
         ]
-        if self.two_step:
+        if self.two_step == "cf":
+            lines.append(
+                "Two-step: Christiano-Fitzgerald low-pass trend "
+                f"(periods longer than {self.cf_high:.0f} observations / "
+                f"{self.cf_cutoff:g} years), then MS-AR on the cycle."
+            )
+        elif self.two_step:
             lines.append(
                 "Two-step: OLS quadratic detrend (a + g t + h t^2), "
                 "then MS-AR on residuals."
             )
-        if self.country_intercepts:
+        if self.two_step != "cf" and self.country_intercepts:
             aa = np.array(list(pr["a"].values()) if isinstance(pr["a"], dict) else [pr["a"]], dtype=float)
             lines.append(
                 f"{'a (country)':<{lab}}mean={aa.mean():.4f}  "
                 f"min={aa.min():.4f}  max={aa.max():.4f}"
             )
-        if self.country_trends:
+        if self.two_step != "cf" and self.country_trends:
             gg = np.array(list(pr["g"].values()) if isinstance(pr["g"], dict) else [pr["g"]], dtype=float)
             lines.append(
                 f"{'g (country)':<{lab}}mean={gg.mean():.4f}  "
                 f"min={gg.min():.4f}  max={gg.max():.4f}"
             )
-        else:
+        elif self.two_step != "cf":
             g = float(pr["g"])
             se_g = se.get("g") if have_se else None
             lines.append(f"{'g':<{lab}}{_cell_est(g, W)}")
             if have_se:
                 lines.append(f"{'':<{lab}}{_cell_se(se_g, W)}")
-        if self.two_step and "h" in pr:
+        if self.two_step == "quadratic" and "h" in pr:
             if self.country_trends:
                 hh = np.array(
                     list(pr["h"].values()) if isinstance(pr["h"], dict) else [pr["h"]],
@@ -466,14 +496,20 @@ class PanelMSARResults:
         ax.set_xlabel("Year")
         ax.set_ylabel("cycle (common or country trend removed)")
         if title is None:
-            bits = []
-            bits.append("a_i" if self.country_intercepts else "common a")
-            bits.append("g_i" if self.country_trends else "common g")
-            if self.two_step:
-                bits.append("h t^2")
-                title = "Two-step OLS quadratic-detrended series (" + ", ".join(bits) + ")"
+            if self.two_step == "cf":
+                title = (
+                    "Two-step CF cycle (low-pass trend: periods longer than "
+                    f"{self.cf_cutoff:g} years)"
+                )
             else:
-                title = "Detrended series (" + ", ".join(bits) + ")"
+                bits = []
+                bits.append("a_i" if self.country_intercepts else "common a")
+                bits.append("g_i" if self.country_trends else "common g")
+                if self.two_step:
+                    bits.append("h t^2")
+                    title = "Two-step OLS quadratic-detrended series (" + ", ".join(bits) + ")"
+                else:
+                    title = "Detrended series (" + ", ".join(bits) + ")"
         ax.set_title(title)
         ax.grid(True, alpha=0.3)
         ax.legend(
@@ -507,11 +543,22 @@ class PanelMSAR:
     country_trends : bool
         If True, each country has its own slope g_i (profiled unless two_step).
         If False (default), one common g.
-    two_step : bool
-        If True, OLS-detrend first with a quadratic in calendar time
-        (a + g t + h t^2), using country_intercepts / country_trends
-        for what is country-specific, then joint MS-AR on the residuals.
-        a, g, and h are not re-estimated in the second step.
+    two_step : bool or str
+        If False (default), joint MLE / profiled trend.
+        If True or 'quadratic', OLS-detrend first with a quadratic in
+        calendar time (a + g t + h t^2), using country_intercepts /
+        country_trends for what is country-specific, then joint MS-AR
+        on the residuals. a, g, and h are not re-estimated in the
+        second step.
+        If 'cf', country-specific Christiano-Fitzgerald low-pass trend
+        (cycle = periods from 2 observations up to cf_cutoff years),
+        then joint MS-AR on the CF cycle. Default cutoff is 15 years
+        (60 quarters), a smooth growth-trend cutoff, not the 6–32
+        business-cycle band.
+    cf_cutoff : float
+        Only used when two_step='cf'. Length of the longest oscillation
+        left in the cycle, in the same units as calendar time (years if
+        time is year-fraction). Default 15.
     min_t : int
         Drop countries shorter than this many *observations* (after keeping
         the longest spell). Not years — 8 is 8 quarters if the panel is
@@ -526,6 +573,7 @@ class PanelMSAR:
         country_intercepts=False,
         country_trends=False,
         two_step=False,
+        cf_cutoff=CF_CUTOFF_YEARS_DEFAULT,
         min_t=8,
     ):
         if not isinstance(n_regimes, (int, np.integer)):
@@ -551,7 +599,14 @@ class PanelMSAR:
         self.common_sigma = bool(common_sigma)
         self.country_intercepts = bool(country_intercepts)
         self.country_trends = bool(country_trends)
-        self.two_step = bool(two_step)
+        self.two_step = _parse_two_step(two_step)
+        self.cf_cutoff = float(cf_cutoff)
+        if self.two_step == "cf" and (
+            not np.isfinite(self.cf_cutoff) or self.cf_cutoff <= 0
+        ):
+            raise ValueError(
+                f"cf_cutoff must be a positive number of years (got {cf_cutoff!r})."
+            )
         self.min_t = int(min_t)
         self.res_ = None
         self._ols = None
@@ -560,6 +615,8 @@ class PanelMSAR:
         self._two_step_a = None
         self._two_step_g = None
         self._two_step_h = None
+        self._two_step_z = None
+        self._cf_high = None
 
     def _prepare(self, country, time, y):
         country = _as_1d("country", country)
@@ -927,6 +984,31 @@ class PanelMSAR:
             np.asarray(hh, dtype=float),
         )
 
+    def _cf_detrend(self, panels, high):
+        """Country-specific CF high-pass cycle; low-pass trend is the complement.
+
+        Cycle keeps oscillations from 2 observations up to `high` observations
+        (high = cf_cutoff / time_step). drift=True is the CF random-walk
+        adjustment for I(1) log series.
+        """
+        try:
+            from statsmodels.tsa.filters.cf_filter import cffilter
+        except ImportError as exc:
+            raise ImportError(
+                "two_step='cf' requires statsmodels. Install with: "
+                "pip install statsmodels"
+            ) from exc
+        resid = []
+        for y, t in panels:
+            y = np.asarray(y, dtype=float)
+            if y.size < 4:
+                z = y - y.mean()
+            else:
+                cycle, _trend = cffilter(y, low=2.0, high=float(high), drift=True)
+                z = np.asarray(cycle, dtype=float).reshape(-1)
+            resid.append((z, t))
+        return resid
+
     def _country_nll_ag(self, a, g, y, t, rho, mu, sig, P, pi0):
         z = y - a - g * t
         try:
@@ -1285,7 +1367,28 @@ class PanelMSAR:
         self._ols = [self._ols_ag(y, t) for y, t in panels]
         self._ag_cache = None
         self._last_mu_shift = 0.0
-        if self.two_step:
+        self._two_step_z = None
+        self._cf_high = None
+        if self.two_step == "cf":
+            step = float(info["time_step"]) or 1.0
+            high = float(self.cf_cutoff) / step
+            if high <= 2.0:
+                raise ValueError(
+                    f"cf_cutoff={self.cf_cutoff} with time_step={step} gives "
+                    f"CF high={high:.3f} observations; need high > 2."
+                )
+            self._cf_high = high
+            resid_panels = self._cf_detrend(panels, high)
+            self._two_step_z = [z.copy() for z, _ in resid_panels]
+            packed = self._stack_panels(resid_panels)
+            start_panels = resid_panels
+            warnings.append(
+                "Two-step estimation: Christiano-Fitzgerald low-pass trend "
+                f"(cycle = periods 2–{high:.0f} observations, "
+                f"cutoff {self.cf_cutoff:g} years) then MS-AR on the cycle. "
+                "This is not a single joint MLE of the trend and the cycle."
+            )
+        elif self.two_step:
             resid_panels, a_ts, g_ts, h_ts = self._ols_detrend(panels)
             self._two_step_a = a_ts
             self._two_step_g = g_ts
@@ -1363,6 +1466,10 @@ class PanelMSAR:
         if self._do_profile():
             _, a_hat, g_hat, p = self._profile_all(best, packed)
             h_hat = np.zeros(n_c)
+        elif self.two_step == "cf":
+            a_hat = np.zeros(n_c)
+            g_hat = np.zeros(n_c)
+            h_hat = np.zeros(n_c)
         elif self.two_step:
             a_hat = self._two_step_a + self._last_mu_shift
             g_hat = self._two_step_g
@@ -1406,7 +1513,10 @@ class PanelMSAR:
         if store_filtered:
             pi0 = _stationary_probs(p["P"])
             for i, (cid, (yy, tt)) in enumerate(zip(ids, orig_panels)):
-                z = yy - a_hat[i] - g_hat[i] * tt - h_hat[i] * tt * tt
+                if self.two_step == "cf":
+                    z = self._two_step_z[i] - self._last_mu_shift
+                else:
+                    z = yy - a_hat[i] - g_hat[i] * tt - h_hat[i] * tt * tt
                 _, filt = _country_loglik(
                     z, p["rho"], p["mu"], p["sigma"], p["P"], pi0, return_filter=True
                 )
@@ -1417,14 +1527,18 @@ class PanelMSAR:
 
         rho_out = float(p["rho"][0]) if self.common_rho else p["rho"]
         sig_out = float(p["sigma"][0]) if self.common_sigma else p["sigma"]
-        if self.country_intercepts:
-            a_out = {cid: float(a_hat[i]) for i, cid in enumerate(ids)}
+        if self.two_step == "cf":
+            a_out = 0.0
+            g_out = 0.0
         else:
-            a_out = float(a_hat[0])
-        if self.country_trends:
-            g_out = {cid: float(g_hat[i]) for i, cid in enumerate(ids)}
-        else:
-            g_out = float(g_hat[0])
+            if self.country_intercepts:
+                a_out = {cid: float(a_hat[i]) for i, cid in enumerate(ids)}
+            else:
+                a_out = float(a_hat[0])
+            if self.country_trends:
+                g_out = {cid: float(g_hat[i]) for i, cid in enumerate(ids)}
+            else:
+                g_out = float(g_hat[0])
         params = {
             "P": p["P"],
             "rho": rho_out,
@@ -1433,11 +1547,14 @@ class PanelMSAR:
             "g": g_out,
             "a": a_out,
         }
-        if self.two_step:
+        if self.two_step == "quadratic":
             if self.country_trends:
                 params["h"] = {cid: float(h_hat[i]) for i, cid in enumerate(ids)}
             else:
                 params["h"] = float(h_hat[0])
+        if self.two_step == "cf":
+            params["cf_cutoff"] = float(self.cf_cutoff)
+            params["cf_high"] = float(self._cf_high)
 
         self.res_ = PanelMSARResults(
             success=best_ok,
@@ -1466,6 +1583,8 @@ class PanelMSAR:
             country_intercepts=self.country_intercepts,
             country_trends=self.country_trends,
             two_step=self.two_step,
+            cf_cutoff=float(self.cf_cutoff),
+            cf_high=float(self._cf_high) if self._cf_high is not None else 0.0,
         )
         if detrend_pdf:
             self.res_.plot_detrended(detrend_pdf)
