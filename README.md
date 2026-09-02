@@ -31,7 +31,7 @@ Countries are independent given shared $\theta$. Likelihood: Hamilton filter per
 | Initial condition | $z_1 \mid s_1 \sim N\bigl(\mu_s,\, \sigma_s^2/(1-\rho_s^2)\bigr)$, with $s_1$ from the ergodic distribution of $\Pi$. |
 | Sample | Unbalanced panel. Drop countries with fewer than `min_t` **observations**. Calendar gaps: keep the longest contiguous spell (no interpolation). |
 
-$a$ (or the $a_i$) and the regime means are collinear without the median-mean pin. Country intercepts and slopes are profiled out of the joint likelihood so they are not in the outer parameter vector.
+$a$ (or the $a_i$) and the regime means are collinear without the median-mean pin. By default, country intercepts and slopes are profiled out of the joint likelihood so they are not in the outer parameter vector. Set `two_step=True` to OLS-detrend first with a quadratic in calendar time, $a + g t + h t^2$ (country-specific $a_i$, $g_i$, $h_i$ follow `country_intercepts` / `country_trends`; $h$ is country-specific iff slopes are) and then run the joint MS-AR on residuals. $a$, $g$, and $h$ are not re-estimated in the second step. Two-step is not a single joint MLE of the trend and the cycle. The OLS residuals are orthogonal to $1$, $t$, and $t^2$. After the median-$\mu$ pin, the shift is added to $a$ (or each $a_i$).
 
 ## Estimator
 
@@ -57,14 +57,15 @@ from panel_msar import PanelMSAR
 
 mod = PanelMSAR(
     n_regimes=3, common_rho=True, common_sigma=False,
-    country_intercepts=False, country_trends=False, min_t=12,
+    country_intercepts=False, country_trends=False,
+    two_step=False, min_t=12,
 )
 res = mod.fit(
     df["country"], df["time"], df["y"],
     n_starts=8, maxiter=400, detrend_pdf="cycle.pdf",
 )
 print(res)                 # g, rho, regime table, Pi; SEs in parentheses underneath
-res.params                 # a, g (scalar or dict), rho, mu, sigma, P
+res.params                 # a, g (scalar or dict), h if two_step, rho, mu, sigma, P
 res.filtered_probs[cid]    # time, cycle, p_regime0/1/2
 res.plot_detrended("cycle.pdf")
 ```

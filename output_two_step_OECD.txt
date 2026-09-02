@@ -1,0 +1,34 @@
+Demo OECD log real GDP per worker  countries=34  obs=6784  1960-Q1–2025-Q4
+n_regimes=3  two_step=True (quadratic)  country_intercepts=True  country_trends=True  common_rho=False  common_sigma=False  compute_se=True
+
+Joint panel MS-AR(1) + common log-linear trend
+Regimes: 3    Countries: 34    Observations: 6784
+Log-likelihood: 21460.7256
+Converged: True    CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+
+Regimes ordered by mu; median regime 1 has mu pinned at 0.
+Two-step: OLS quadratic detrend (a + g t + h t^2), then MS-AR on residuals.
+a (country)   mean=9.2604  min=-3.5462  max=11.6756
+g (country)   mean=0.0617  min=-0.0229  max=0.4765
+h (country)   mean=-0.000453  min=-0.003715  max=0.000408
+
+Regime parameters
+                         0           1           2
+mu                 -0.0126      0.0000      0.0080
+                  (0.0082)         (—)    (0.0045)
+sigma               0.0400      0.0053      0.0116
+                  (0.0017)    (0.0001)    (0.0004)
+rho                 0.7839      0.9900      0.9476
+                  (0.0333)    (0.0034)    (0.0070)
+
+Transition matrix Pi [from \ to]
+                         0           1           2
+from 0              0.7646      0.0016      0.2337
+                  (0.0304)    (0.0080)    (0.0318)
+from 1              0.0106      0.9589      0.0305
+                  (0.0032)    (0.0055)    (0.0061)
+from 2              0.0336      0.0415      0.9249
+                  (0.0060)    (0.0066)    (0.0088)
+
+Warnings:
+  - Two-step estimation: OLS quadratic detrend (a + g t + h t^2) then MS-AR on residuals. This is not a single joint MLE of the trend and the cycle.

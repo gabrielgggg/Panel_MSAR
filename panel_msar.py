@@ -305,6 +305,7 @@ class PanelMSARResults:
     common_sigma: bool = False
     country_intercepts: bool = False
     country_trends: bool = False
+    two_step: bool = False
 
     def summary(self) -> str:
         k = self.n_regimes
@@ -353,6 +354,11 @@ class PanelMSARResults:
             "",
             f"Regimes ordered by mu; median regime {mid} has mu pinned at 0.",
         ]
+        if self.two_step:
+            lines.append(
+                "Two-step: OLS quadratic detrend (a + g t + h t^2), "
+                "then MS-AR on residuals."
+            )
         if self.country_intercepts:
             aa = np.array(list(pr["a"].values()) if isinstance(pr["a"], dict) else [pr["a"]], dtype=float)
             lines.append(
@@ -371,6 +377,18 @@ class PanelMSARResults:
             lines.append(f"{'g':<{lab}}{_cell_est(g, W)}")
             if have_se:
                 lines.append(f"{'':<{lab}}{_cell_se(se_g, W)}")
+        if self.two_step and "h" in pr:
+            if self.country_trends:
+                hh = np.array(
+                    list(pr["h"].values()) if isinstance(pr["h"], dict) else [pr["h"]],
+                    dtype=float,
+                )
+                lines.append(
+                    f"{'h (country)':<{lab}}mean={hh.mean():.6f}  "
+                    f"min={hh.min():.6f}  max={hh.max():.6f}"
+                )
+            else:
+                lines.append(f"{'h':<{lab}}{_cell_est(float(pr['h']), W)}")
         if self.common_rho:
             r = float(rho[0])
             lines.append(f"{'rho (common)':<{lab}}{_cell_est(r, W)}")
@@ -451,7 +469,11 @@ class PanelMSARResults:
             bits = []
             bits.append("a_i" if self.country_intercepts else "common a")
             bits.append("g_i" if self.country_trends else "common g")
-            title = "Detrended series (" + ", ".join(bits) + ")"
+            if self.two_step:
+                bits.append("h t^2")
+                title = "Two-step OLS quadratic-detrended series (" + ", ".join(bits) + ")"
+            else:
+                title = "Detrended series (" + ", ".join(bits) + ")"
         ax.set_title(title)
         ax.grid(True, alpha=0.3)
         ax.legend(
@@ -483,8 +505,13 @@ class PanelMSAR:
         If True, each country has its own intercept a_i (profiled).
         If False (default), one common a.
     country_trends : bool
-        If True, each country has its own slope g_i (profiled).
+        If True, each country has its own slope g_i (profiled unless two_step).
         If False (default), one common g.
+    two_step : bool
+        If True, OLS-detrend first with a quadratic in calendar time
+        (a + g t + h t^2), using country_intercepts / country_trends
+        for what is country-specific, then joint MS-AR on the residuals.
+        a, g, and h are not re-estimated in the second step.
     min_t : int
         Drop countries shorter than this many *observations* (after keeping
         the longest spell). Not years — 8 is 8 quarters if the panel is
@@ -498,6 +525,7 @@ class PanelMSAR:
         common_sigma=False,
         country_intercepts=False,
         country_trends=False,
+        two_step=False,
         min_t=8,
     ):
         if not isinstance(n_regimes, (int, np.integer)):
@@ -523,10 +551,15 @@ class PanelMSAR:
         self.common_sigma = bool(common_sigma)
         self.country_intercepts = bool(country_intercepts)
         self.country_trends = bool(country_trends)
+        self.two_step = bool(two_step)
         self.min_t = int(min_t)
         self.res_ = None
         self._ols = None
         self._ag_cache = None
+        self._last_mu_shift = 0.0
+        self._two_step_a = None
+        self._two_step_g = None
+        self._two_step_h = None
 
     def _prepare(self, country, time, y):
         country = _as_1d("country", country)
@@ -702,6 +735,18 @@ class PanelMSAR:
         mid = self._mid_regime()
         return [s for s in range(self.n_regimes) if s != mid]
 
+    def _outer_has_a(self):
+        return (not self.country_intercepts) and (not self.two_step)
+
+    def _outer_has_g(self):
+        return (not self.country_trends) and (not self.two_step)
+
+    def _do_profile(self):
+        return (
+            (self.country_intercepts or self.country_trends)
+            and (not self.two_step)
+        )
+
     def param_names(self):
         k = self.n_regimes
         names = []
@@ -719,9 +764,9 @@ class PanelMSAR:
             names += [f"sigma[{s}]" for s in range(k)]
         else:
             names += ["sigma"]
-        if not self.country_trends:
+        if self._outer_has_g():
             names += ["g"]
-        if not self.country_intercepts:
+        if self._outer_has_a():
             names += ["a"]
         return names
 
@@ -760,12 +805,12 @@ class PanelMSAR:
             sig = np.full(k, np.exp(np.clip(theta[i], -20.0, 5.0)))
             i += 1
 
-        if not self.country_trends:
+        if self._outer_has_g():
             g = theta[i]
             i += 1
         else:
             g = 0.0
-        if not self.country_intercepts:
+        if self._outer_has_a():
             a = theta[i]
         else:
             a = 0.0
@@ -785,9 +830,9 @@ class PanelMSAR:
             th += [float(np.log(s)) for s in sig]
         else:
             th += [float(np.log(np.mean(sig)))]
-        if not self.country_trends:
+        if self._outer_has_g():
             th += [float(g)]
-        if not self.country_intercepts:
+        if self._outer_has_a():
             th += [float(a)]
         return np.asarray(th, dtype=float)
 
@@ -804,6 +849,83 @@ class PanelMSAR:
         X = np.column_stack([np.ones(len(y)), t])
         beta, *_ = np.linalg.lstsq(X, y, rcond=None)
         return float(beta[0]), float(beta[1])
+
+    @staticmethod
+    def _ols_agh(y, t):
+        """OLS y = a + g t + h t^2. Falls back to linear if n < 3."""
+        n = len(y)
+        t = np.asarray(t, dtype=float)
+        y = np.asarray(y, dtype=float)
+        if n < 3:
+            a, g = PanelMSAR._ols_ag(y, t)
+            return a, g, 0.0
+        X = np.column_stack([np.ones(n), t, t * t])
+        beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+        return float(beta[0]), float(beta[1]), float(beta[2])
+
+    def _ols_detrend(self, panels):
+        """OLS quadratic detrend per flags; residual panels and a, g, h."""
+        ys = np.concatenate([y for y, _ in panels])
+        ts = np.concatenate([t for _, t in panels])
+        a_pool, g_pool, h_pool = self._ols_agh(ys, ts)
+        resid, aa, gg, hh = [], [], [], []
+        ci, ct = self.country_intercepts, self.country_trends
+        if ci and ct:
+            for y, t in panels:
+                a, g, h = self._ols_agh(y, t)
+                resid.append((y - a - g * t - h * t * t, t))
+                aa.append(a)
+                gg.append(g)
+                hh.append(h)
+        elif ci and not ct:
+            yd, td, t2d = [], [], []
+            means = []
+            for y, t in panels:
+                t2 = t * t
+                my, mt, mt2 = float(y.mean()), float(t.mean()), float(t2.mean())
+                means.append((my, mt, mt2))
+                yd.append(y - my)
+                td.append(t - mt)
+                t2d.append(t2 - mt2)
+            Y = np.concatenate(yd)
+            X = np.column_stack([np.concatenate(td), np.concatenate(t2d)])
+            if Y.size >= 2:
+                gh, *_ = np.linalg.lstsq(X, Y, rcond=None)
+                g, h = float(gh[0]), float(gh[1])
+            else:
+                g, h = g_pool, h_pool
+            for (y, t), (my, mt, mt2) in zip(panels, means):
+                a = float(my - g * mt - h * mt2)
+                resid.append((y - a - g * t - h * t * t, t))
+                aa.append(a)
+                gg.append(g)
+                hh.append(h)
+        elif ct and not ci:
+            a = a_pool
+            for y, t in panels:
+                X = np.column_stack([t, t * t])
+                if len(y) >= 2:
+                    gh, *_ = np.linalg.lstsq(X, y - a, rcond=None)
+                    g, h = float(gh[0]), float(gh[1])
+                else:
+                    g, h = g_pool, h_pool
+                resid.append((y - a - g * t - h * t * t, t))
+                aa.append(a)
+                gg.append(g)
+                hh.append(h)
+        else:
+            a, g, h = a_pool, g_pool, h_pool
+            for y, t in panels:
+                resid.append((y - a - g * t - h * t * t, t))
+                aa.append(a)
+                gg.append(g)
+                hh.append(h)
+        return (
+            resid,
+            np.asarray(aa, dtype=float),
+            np.asarray(gg, dtype=float),
+            np.asarray(hh, dtype=float),
+        )
 
     def _country_nll_ag(self, a, g, y, t, rho, mu, sig, P, pi0):
         z = y - a - g * t
@@ -920,7 +1042,7 @@ class PanelMSAR:
         ycat, tcat, lengths, offsets = packed
         p = self._unpack(theta)
         pi0 = _stationary_probs(p["P"]).astype(np.float64)
-        if not self.country_intercepts and not self.country_trends:
+        if not self._do_profile():
             zcat = ycat - p["a"] - p["g"] * tcat
             ll = _panel_ll_nb(
                 zcat, lengths, offsets,
@@ -1034,9 +1156,10 @@ class PanelMSAR:
         a = p["a"]
         g = p["g"]
         pin = self._mid_regime()
-        shift = mu[pin]
+        shift = float(mu[pin])
         mu = mu - shift
         a = a + shift
+        self._last_mu_shift = shift
         return self._pack_from_dicts(P, rho, mu, sig, g, a)
 
     def _se_P(self, P, cov):
@@ -1158,11 +1281,27 @@ class PanelMSAR:
             )
 
         rng = np.random.default_rng(seed)
-        packed = self._stack_panels(panels)
+        orig_panels = panels
         self._ols = [self._ols_ag(y, t) for y, t in panels]
         self._ag_cache = None
+        self._last_mu_shift = 0.0
+        if self.two_step:
+            resid_panels, a_ts, g_ts, h_ts = self._ols_detrend(panels)
+            self._two_step_a = a_ts
+            self._two_step_g = g_ts
+            self._two_step_h = h_ts
+            packed = self._stack_panels(resid_panels)
+            start_panels = resid_panels
+            warnings.append(
+                "Two-step estimation: OLS quadratic detrend "
+                "(a + g t + h t^2) then MS-AR on residuals. "
+                "This is not a single joint MLE of the trend and the cycle."
+            )
+        else:
+            packed = self._stack_panels(panels)
+            start_panels = panels
         _warmup_numba()
-        starts = self._starting_values(panels, n_starts, rng)
+        starts = self._starting_values(start_panels, n_starts, rng)
         best, best_fun, best_msg, best_ok = None, np.inf, "", False
         n_ok = 0
         for i, th0 in enumerate(starts):
@@ -1220,7 +1359,18 @@ class PanelMSAR:
         p = self._unpack(best)
         names = self.param_names()
         ll = -best_fun
-        _, a_hat, g_hat, p = self._profile_all(best, packed)
+        n_c = len(orig_panels)
+        if self._do_profile():
+            _, a_hat, g_hat, p = self._profile_all(best, packed)
+            h_hat = np.zeros(n_c)
+        elif self.two_step:
+            a_hat = self._two_step_a + self._last_mu_shift
+            g_hat = self._two_step_g
+            h_hat = self._two_step_h
+        else:
+            a_hat = np.full(n_c, float(p["a"]))
+            g_hat = np.full(n_c, float(p["g"]))
+            h_hat = np.zeros(n_c)
         if compute_se:
             stderr, cov = self._stderr(best, packed)
             se_params = self._se_transformed(best, stderr, cov)
@@ -1255,8 +1405,8 @@ class PanelMSAR:
         filtered = {}
         if store_filtered:
             pi0 = _stationary_probs(p["P"])
-            for i, (cid, (yy, tt)) in enumerate(zip(ids, panels)):
-                z = yy - a_hat[i] - g_hat[i] * tt
+            for i, (cid, (yy, tt)) in enumerate(zip(ids, orig_panels)):
+                z = yy - a_hat[i] - g_hat[i] * tt - h_hat[i] * tt * tt
                 _, filt = _country_loglik(
                     z, p["rho"], p["mu"], p["sigma"], p["P"], pi0, return_filter=True
                 )
@@ -1283,6 +1433,11 @@ class PanelMSAR:
             "g": g_out,
             "a": a_out,
         }
+        if self.two_step:
+            if self.country_trends:
+                params["h"] = {cid: float(h_hat[i]) for i, cid in enumerate(ids)}
+            else:
+                params["h"] = float(h_hat[0])
 
         self.res_ = PanelMSARResults(
             success=best_ok,
@@ -1310,6 +1465,7 @@ class PanelMSAR:
             common_sigma=self.common_sigma,
             country_intercepts=self.country_intercepts,
             country_trends=self.country_trends,
+            two_step=self.two_step,
         )
         if detrend_pdf:
             self.res_.plot_detrended(detrend_pdf)
