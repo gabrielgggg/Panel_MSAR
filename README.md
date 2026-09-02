@@ -37,6 +37,8 @@ $a$ and the regime means are collinear without the median-mean pin. Without coun
 
 `demo_panel_msar.py` simulates a 3-regime DGP and recovers parameters.
 
+`demo_oecd_msar.py` fits the same model on a demo OECD quarterly panel of log real GDP per worker (`data/demo_oecd_gdp_per_worker_q.csv`). Refresh the panel with `python data/fetch_demo_oecd.py`.
+
 ## Data and API
 
 Pass `country`, `time`, `y` (ideally in logs). `time` must share one calendar origin, not periods-since-entry.
@@ -53,8 +55,8 @@ from panel_msar import PanelMSAR
 
 mod = PanelMSAR(n_regimes=3, common_rho=True, common_sigma=False, min_t=12)
 res = mod.fit(df["country"], df["time"], df["y"], n_starts=8, maxiter=400)
-print(res)                 # regime table + Pi; SEs in parentheses underneath
-res.params                 # rho, mu, sigma, P; a and g are estimated but nuisance
+print(res)                 # g, rho, regime table, Pi; SEs in parentheses underneath
+res.params                 # a, g, rho, mu, sigma, P
 res.filtered_probs[cid]    # time, cycle, p_regime0/1/2
 ```
 

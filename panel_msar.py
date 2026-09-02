@@ -350,6 +350,11 @@ class PanelMSARResults:
             "",
             f"Regimes ordered by mu; median regime {mid} has mu pinned at 0.",
         ]
+        g = float(pr["g"])
+        se_g = se.get("g") if have_se else None
+        lines.append(f"{'g':<{lab}}{_cell_est(g, W)}")
+        if have_se:
+            lines.append(f"{'':<{lab}}{_cell_se(se_g, W)}")
         if self.common_rho:
             r = float(rho[0])
             lines.append(f"{'rho (common)':<{lab}}{_cell_est(r, W)}")

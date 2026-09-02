@@ -5,3 +5,4 @@ __pycache__/
 venv/
 .env
 *.png
+data/demo_oecd_eo_raw.csv
