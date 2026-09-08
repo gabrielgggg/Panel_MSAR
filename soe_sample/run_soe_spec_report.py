@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
 
+plt.rcParams["font.family"] = "DejaVu Sans"
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(ROOT))
@@ -21,7 +23,7 @@ OUT_PDF = HERE / "soe_msar_specs.pdf"
 SPECS = [
     dict(
         key="1_common_ag",
-        title="1. Common intercept and linear trend",
+        title="2. Common intercept and linear trend",
         country_intercepts=False,
         country_trends=False,
         two_step=False,
@@ -30,7 +32,7 @@ SPECS = [
     ),
     dict(
         key="2_ai_common_g",
-        title="2. Country-specific intercepts, common linear trend",
+        title="3. Country-specific intercepts, common linear trend",
         country_intercepts=True,
         country_trends=False,
         two_step=False,
@@ -39,7 +41,7 @@ SPECS = [
     ),
     dict(
         key="3_ai_gi",
-        title="3. Country-specific intercepts and linear trends",
+        title="4. Country-specific intercepts and linear trends",
         country_intercepts=True,
         country_trends=True,
         two_step=False,
@@ -48,7 +50,7 @@ SPECS = [
     ),
     dict(
         key="4_cf",
-        title="4. Country-specific CF filtered trend (25 years)",
+        title="5. Country-specific CF filtered trend (25 years)",
         country_intercepts=False,
         country_trends=False,
         two_step="cf",
@@ -57,7 +59,7 @@ SPECS = [
     ),
     dict(
         key="5_cf_zero_mu",
-        title="5. CF filtered trend, all regime means restricted to 0",
+        title="6. CF filtered trend, all regime means restricted to 0",
         country_intercepts=False,
         country_trends=False,
         two_step="cf",
@@ -66,7 +68,7 @@ SPECS = [
     ),
     dict(
         key="6_cf_common_rho",
-        title="6. CF filtered trend, common rho",
+        title="7. CF filtered trend, common rho",
         country_intercepts=False,
         country_trends=False,
         two_step="cf",
@@ -231,17 +233,87 @@ def _cycle_page(spec, res):
     fig, ax = plt.subplots(figsize=(11, 8.5))
     for i, cid in enumerate(ids):
         d = res.filtered_probs[cid]
-        ax.plot(d["time"], d["cycle"], color=colors[i], lw=0.9, alpha=0.9, label=str(cid))
+        ax.plot(d["time"], d["cycle"], color=colors[i], lw=0.9, alpha=0.9)
     ax.axhline(0.0, color="k", lw=0.6, alpha=0.5)
     ax.set_xlabel("Year")
     ax.set_ylabel("cycle (trend removed)")
     ax.set_title(spec["title"] + " — detrended series")
     ax.grid(True, alpha=0.3)
-    ax.legend(
-        ncol=3, fontsize=6, loc="center left",
-        bbox_to_anchor=(1.01, 0.5), frameon=False, borderaxespad=0,
-    )
     fig.tight_layout()
+    return fig
+
+
+def _toc_page():
+    fig = plt.figure(figsize=(11, 8.5))
+    fig.suptitle("Panel MS-AR(1): SOE log real GDP per worker", fontsize=16, fontweight="bold", y=0.92)
+    fig.text(0.5, 0.86, "Contents", ha="center", fontsize=13, fontweight="bold")
+    lines = [
+        ("1.", "Model", "2"),
+        ("2.", "Common intercept and linear trend", "3"),
+        ("3.", "Country-specific intercepts, common linear trend", "5"),
+        ("4.", "Country-specific intercepts and linear trends", "7"),
+        ("5.", "Country-specific CF filtered trend (25 years)", "9"),
+        ("6.", "CF filtered trend, all regime means restricted to 0", "11"),
+        ("7.", "CF filtered trend, common rho", "13"),
+    ]
+    y = 0.76
+    for num, title, page in lines:
+        fig.text(0.16, y, f"{num}  {title}", ha="left", va="center", fontsize=12)
+        fig.text(0.84, y, page, ha="right", va="center", fontsize=12)
+        y -= 0.07
+    fig.text(
+        0.16, 0.18,
+        "Each empirical section has a table of regime AR(1) estimates\n"
+        "(standard errors in parentheses) and a plot of country cycles.",
+        ha="left", va="top", fontsize=10, color="0.25",
+    )
+    return fig
+
+
+def _model_page():
+    fig = plt.figure(figsize=(11, 8.5))
+    fig.suptitle("1. Model", fontsize=14, fontweight="bold", y=0.95)
+    y = 0.88
+    fig.text(
+        0.12, y,
+        "Joint panel Markov-switching AR(1) around a trend. Three regimes.",
+        fontsize=11,
+    )
+    y -= 0.08
+    eqs = [
+        r"$y_{it} = a_i + g_i\, t + z_{it}$",
+        r"$z_{i,t+1} = (1-\rho(s_{it}))\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}$",
+        r"$s_{i,t+1}$ drawn from row $s_{it}$ of Pi",
+    ]
+    for eq in eqs:
+        fig.text(0.16, y, eq, ha="left", va="center", fontsize=13)
+        y -= 0.055
+    y -= 0.02
+    para = [
+        r"Countries are independent given shared Markov parameters; latent paths $s_{it}$",
+        r"are country-specific. The regime dated $t$ governs the transition from $z_t$ to $z_{t+1}$.",
+        r"$\sigma$ switches with the regime. Unless noted, $\rho$ is regime-specific and the median",
+        r"$\mu$ is pinned at 0 after ordering. Likelihood: Hamilton filter per country, summed.",
+    ]
+    for line in para:
+        fig.text(0.12, y, line, ha="left", va="top", fontsize=10)
+        y -= 0.035
+    y -= 0.03
+    fig.text(0.12, y, "Trend assumptions in this report", fontsize=12, fontweight="bold")
+    y -= 0.05
+    bullets = [
+        r"2. Common $a$ and common linear $g$ (joint MLE).",
+        r"3. Country intercepts $a_i$, common $g$ ($a_i$ profiled).",
+        r"4. Country intercepts $a_i$ and slopes $g_i$ (both profiled).",
+        r"5. Country-specific Christiano-Fitzgerald low-pass trend",
+        r"    (cycle = periods of 2-100 quarters / 25 years), then MS-AR on the cycle.",
+        r"6. Same CF trend as 5, with every $\mu(s)=0$.",
+        r"7. Same CF trend as 5, with one $\rho$ common to all regimes.",
+        "Sections 5-7 are two-step (not joint MLE of trend and cycle).",
+    ]
+    for b in bullets:
+        fig.text(0.14, y, b, ha="left", va="top", fontsize=10)
+        y -= 0.048
     return fig
 
 
@@ -299,6 +371,12 @@ def main():
         res = fit_spec(df, spec)
         fitted.append((spec, res))
     with PdfPages(OUT_PDF) as pdf:
+        fig = _toc_page()
+        pdf.savefig(fig)
+        plt.close(fig)
+        fig = _model_page()
+        pdf.savefig(fig)
+        plt.close(fig)
         for spec, res in fitted:
             fig = _table_page(spec, res, sample_line)
             pdf.savefig(fig)
