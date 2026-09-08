@@ -1,0 +1,33 @@
+SOE log real GDP per worker
+6. CF filtered trend, common rho
+n_regimes=3  two_step='cf'  country_intercepts=False  country_trends=False  zero_mu=False  common_rho=True  cf_cutoff=25  compute_se=True
+
+Joint panel MS-AR(1) + common log-linear trend
+Regimes: 3    Countries: 62    Observations: 7004
+Log-likelihood: 18238.5214
+Converged: True    CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+
+Regimes ordered by mu; median regime 1 has mu pinned at 0.
+Two-step: Christiano-Fitzgerald low-pass trend (periods longer than 100 observations / 25 years), then MS-AR on the cycle.
+rho (common)        0.9003
+                  (0.0061)
+
+Regime parameters
+                         0           1           2
+mu                 -0.0203      0.0000      0.0028
+                  (0.1547)         (—)    (0.0017)
+sigma               0.2151      0.0241      0.0096
+                  (0.0136)    (0.0005)    (0.0002)
+
+Transition matrix Pi [from \ to]
+                         0           1           2
+from 0              0.5996      0.3382      0.0622
+                  (0.0459)    (0.0511)    (0.0299)
+from 1              0.0139      0.9577      0.0284
+                  (0.0029)    (0.0054)    (0.0046)
+from 2              0.0085      0.0201      0.9715
+                  (0.0021)    (0.0037)    (0.0036)
+
+Warnings:
+  - Two-step estimation: Christiano-Fitzgerald low-pass trend (cycle = periods 2–100 observations, cutoff 25 years) then MS-AR on the cycle. This is not a single joint MLE of the trend and the cycle.
+  - Regime standard deviations differ by more than 10x; one sigma may have exploded.

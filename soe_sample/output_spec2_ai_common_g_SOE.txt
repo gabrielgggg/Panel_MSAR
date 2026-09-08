@@ -1,0 +1,35 @@
+SOE log real GDP per worker
+2. Country-specific intercepts, common linear trend
+n_regimes=3  two_step=False  country_intercepts=True  country_trends=False  zero_mu=False  common_rho=False  cf_cutoff=25  compute_se=True
+
+Joint panel MS-AR(1) + common log-linear trend
+Regimes: 3    Countries: 62    Observations: 7004
+Log-likelihood: 14939.6315
+Converged: True    CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+
+Regimes ordered by mu; median regime 1 has mu pinned at 0.
+a (country)   mean=-4.3353  min=-10.4968  max=2.0652
+g                   0.0114
+                          
+
+Regime parameters
+                         0           1           2
+mu                 -1.5141      0.0000      1.5317
+                                   (—)            
+sigma               0.8905      0.0197      0.7073
+                                                  
+rho                 0.8895      0.9207      0.8480
+                                                  
+
+Transition matrix Pi [from \ to]
+                         0           1           2
+from 0              0.8675      0.0728      0.0597
+                                                  
+from 1              0.0345      0.9204      0.0450
+                                                  
+from 2              0.0693      0.0643      0.8664
+                                                  
+
+Warnings:
+  - Numerical Hessian could not be inverted; std errors are missing. For a paper, bootstrap countries.
+  - Regime standard deviations differ by more than 10x; one sigma may have exploded.
