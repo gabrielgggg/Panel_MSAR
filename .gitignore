@@ -6,3 +6,17 @@ venv/
 .env
 *.png
 data/demo_oecd_eo_raw.csv
+
+# LaTeX aux
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+*.nav
+*.snm
+*.vrb

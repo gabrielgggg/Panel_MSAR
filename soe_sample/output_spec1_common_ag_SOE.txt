@@ -1,5 +1,5 @@
 SOE log real GDP per worker
-2. Common intercept and linear trend
+Common intercept and linear trend
 n_regimes=3  two_step=False  country_intercepts=False  country_trends=False  zero_mu=False  common_rho=False  cf_cutoff=25  compute_se=True
 
 Joint panel MS-AR(1) + common log-linear trend

@@ -1112,7 +1112,9 @@ class PanelMSAR:
         if fix_a is None and fix_g is not None:
             def fa(a):
                 return self._country_nll_ag(a, fix_g, y, t, rho, mu, sig, P, pi0)
-            a = self._brent_1d(fa, a0, half_width=5.0)
+            a = self._brent_1d(fa, a0, half_width=8.0)
+            if fa(a) > fa(a0) - 1e-12:
+                a = float(a0)
             return -fa(a), a, fix_g
 
         if fix_g is None and fix_a is not None:
@@ -1450,6 +1452,10 @@ class PanelMSAR:
         best, best_fun, best_msg, best_ok = None, np.inf, "", False
         n_ok = 0
         for i, th0 in enumerate(starts):
+            # Do not carry a_i/g_i from a previous start: a bad start can
+            # park the 1-D Brent window around a crazy intercept (~1000)
+            # and the next start never recovers.
+            self._ag_cache = None
             opt = minimize(
                 self._nll,
                 th0,
@@ -1479,6 +1485,7 @@ class PanelMSAR:
             )
 
         best = self._order_regimes(best)
+        self._ag_cache = None
         opt = minimize(
             self._nll,
             best,
@@ -1506,7 +1513,10 @@ class PanelMSAR:
         ll = -best_fun
         n_c = len(orig_panels)
         if self._do_profile():
-            _, a_hat, g_hat, p = self._profile_all(best, packed)
+            self._ag_cache = None
+            ll_prof, a_hat, g_hat, p = self._profile_all(best, packed)
+            if np.isfinite(ll_prof):
+                ll = float(ll_prof)
             h_hat = np.zeros(n_c)
         elif self.two_step == "cf":
             a_hat = np.zeros(n_c)
@@ -1521,6 +1531,7 @@ class PanelMSAR:
             g_hat = np.full(n_c, float(p["g"]))
             h_hat = np.zeros(n_c)
         if compute_se:
+            self._ag_cache = None
             stderr, cov = self._stderr(best, packed)
             se_params = self._se_transformed(best, stderr, cov)
         else:

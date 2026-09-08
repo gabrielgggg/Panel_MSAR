@@ -1,5 +1,5 @@
 SOE log real GDP per worker
-7. CF filtered trend, common rho
+CF filtered trend, common $\rho$
 n_regimes=3  two_step='cf'  country_intercepts=False  country_trends=False  zero_mu=False  common_rho=True  cf_cutoff=25  compute_se=True
 
 Joint panel MS-AR(1) + common log-linear trend

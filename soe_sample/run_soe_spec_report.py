@@ -1,14 +1,12 @@
-"""Fit six 3-regime SOE specs and write a vector PDF (table + cycle plot each)."""
+"""Fit six 3-regime SOE specs and compile a LaTeX report PDF."""
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.backends.backend_pdf import PdfPages
-
-plt.rcParams["font.family"] = "DejaVu Sans"
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -19,61 +17,69 @@ from panel_msar import PanelMSAR
 from prepare_soe_panel import load_panel
 
 OUT_PDF = HERE / "soe_msar_specs.pdf"
+TEX = HERE / "soe_msar_specs.tex"
+FIGS = HERE / "figs"
 
 SPECS = [
     dict(
         key="1_common_ag",
-        title="2. Common intercept and linear trend",
+        title="Common intercept and linear trend",
         country_intercepts=False,
         country_trends=False,
         two_step=False,
         zero_mu=False,
         common_rho=False,
+        compute_se=True,
     ),
     dict(
         key="2_ai_common_g",
-        title="3. Country-specific intercepts, common linear trend",
+        title="Country-specific intercepts, common linear trend",
         country_intercepts=True,
         country_trends=False,
         two_step=False,
         zero_mu=False,
         common_rho=False,
+        compute_se=False,
     ),
     dict(
         key="3_ai_gi",
-        title="4. Country-specific intercepts and linear trends",
+        title="Country-specific intercepts and linear trends",
         country_intercepts=True,
         country_trends=True,
         two_step=False,
         zero_mu=False,
         common_rho=False,
+        compute_se=True,
     ),
     dict(
         key="4_cf",
-        title="5. Country-specific CF filtered trend (25 years)",
+        title="Country-specific CF filtered trend (25 years)",
         country_intercepts=False,
         country_trends=False,
         two_step="cf",
         zero_mu=False,
         common_rho=False,
+        compute_se=True,
     ),
     dict(
         key="5_cf_zero_mu",
-        title="6. CF filtered trend, all regime means restricted to 0",
+        title="CF filtered trend, all regime means restricted to 0",
         country_intercepts=False,
         country_trends=False,
         two_step="cf",
         zero_mu=True,
         common_rho=False,
+        compute_se=True,
     ),
     dict(
         key="6_cf_common_rho",
-        title="7. CF filtered trend, common rho",
+        title="CF filtered trend, common $\\rho$",
         country_intercepts=False,
         country_trends=False,
         two_step="cf",
         zero_mu=False,
         common_rho=True,
+        compute_se=True,
     ),
 ]
 
@@ -85,133 +91,26 @@ def _as1d(x, k):
     return a
 
 
-def _fmt_est(x):
-    return f"{float(x):.4f}"
-
-
-def _fmt_se(se, pinned=False):
-    if pinned:
-        return "(—)"
-    if se is None or not np.isfinite(se):
-        return ""
-    return f"({float(se):.4f})"
-
-
 def _se_at(arr, i):
     if arr is None:
         return None
     a = np.atleast_1d(arr)
     if a.size <= i:
         return None
-    return float(a[i])
+    v = float(a[i])
+    return v if np.isfinite(v) else None
 
 
-def _ag_line(res):
-    pr = res.params
-    bits = []
-    if res.two_step == "cf":
-        bits.append(
-            f"CF low-pass: periods longer than {res.cf_high:.0f} obs "
-            f"({res.cf_cutoff:g} years)"
-        )
-        return "  ".join(bits)
-    a = pr.get("a")
-    g = pr.get("g")
-    se = res.se_params or {}
-    if res.country_intercepts and isinstance(a, dict):
-        aa = np.array(list(a.values()), dtype=float)
-        bits.append(f"a_i  mean={aa.mean():.4f}  min={aa.min():.4f}  max={aa.max():.4f}")
-    elif a is not None and not isinstance(a, dict):
-        sa = se.get("a")
-        extra = f"  {_fmt_se(sa)}" if sa is not None else ""
-        bits.append(f"a  {_fmt_est(a)}{extra}")
-    if res.country_trends and isinstance(g, dict):
-        gg = np.array(list(g.values()), dtype=float)
-        bits.append(f"g_i  mean={gg.mean():.4f}  min={gg.min():.4f}  max={gg.max():.4f}")
-    elif g is not None and not isinstance(g, dict):
-        sg = se.get("g")
-        extra = f"  {_fmt_se(sg)}" if sg is not None else ""
-        bits.append(f"g  {_fmt_est(g)}{extra}")
-    return "     ".join(bits)
+def _tex_est(x):
+    return f"{float(x):.4f}"
 
 
-def _regime_table_rows(res):
-    k = res.n_regimes
-    mid = k // 2
-    pr = res.params
-    se = res.se_params
-    mu = _as1d(pr["mu"], k)
-    sig = _as1d(pr["sigma"], k)
-    rho = _as1d(pr["rho"], k)
-    P = np.asarray(pr["P"], dtype=float)
-    se_mu = np.atleast_1d(se["mu"]) if se is not None else None
-    se_sig = np.atleast_1d(se["sigma"]) if se is not None else None
-    se_rho = np.atleast_1d(se["rho"]) if se is not None else None
-    se_P = np.asarray(se["P"]) if se is not None and "P" in se else None
-
-    pin_mu = np.zeros(k, dtype=bool)
-    if res.zero_mu:
-        pin_mu[:] = True
-    else:
-        pin_mu[mid] = True
-
-    rows = []
-    header = [""] + [f"regime {s}" for s in range(k)]
-    rows.append(header)
-
-    def add_pair(name, vals, ses, pinned=None):
-        est = [name] + [_fmt_est(vals[s]) for s in range(k)]
-        se_row = [""] + [
-            _fmt_se(_se_at(ses, s), pinned=bool(pinned[s]) if pinned is not None else False)
-            for s in range(k)
-        ]
-        rows.append(est)
-        rows.append(se_row)
-
-    add_pair("mu", mu, se_mu, pin_mu)
-    add_pair("sigma", sig, se_sig)
-    if res.common_rho:
-        r = np.full(k, float(rho[0]))
-        sr = np.full(k, _se_at(se_rho, 0) if se_rho is not None else np.nan)
-        add_pair("rho (common)", r, sr)
-    else:
-        add_pair("rho", rho, se_rho)
-    for i in range(k):
-        se_row = se_P[i] if se_P is not None else None
-        add_pair(f"Pi from {i}", P[i], se_row)
-    return rows
-
-
-def _table_page(spec, res, sample_line):
-    fig = plt.figure(figsize=(11, 8.5))
-    fig.suptitle(spec["title"], fontsize=13, fontweight="bold", y=0.96)
-    meta = (
-        f"{sample_line}\n"
-        f"Regimes: {res.n_regimes}    countries: {res.n_countries}    "
-        f"obs: {res.nobs}    log-likelihood: {res.loglik:.2f}\n"
-        f"Converged: {res.success}    {res.message}\n"
-        f"{_ag_line(res)}"
-    )
-    fig.text(0.08, 0.88, meta, va="top", ha="left", fontsize=9, family="monospace")
-    rows = _regime_table_rows(res)
-    ax = fig.add_axes([0.08, 0.08, 0.84, 0.62])
-    ax.axis("off")
-    ax.set_title("Regime AR(1) and transition matrix (SEs in parentheses)", fontsize=10, pad=8)
-    table = ax.table(
-        cellText=rows,
-        loc="upper center",
-        cellLoc="center",
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(8)
-    table.scale(1.0, 1.35)
-    for (r, c), cell in table.get_celld().items():
-        if r == 0:
-            cell.set_facecolor("#e8e8e8")
-            cell.set_text_props(fontweight="bold")
-        if c == 0:
-            cell.set_text_props(ha="left")
-    return fig
+def _tex_se(se, pinned=False):
+    if pinned:
+        return r"---"
+    if se is None or not np.isfinite(se):
+        return ""
+    return f"({float(se):.4f})"
 
 
 def _cycle_colors(n):
@@ -226,95 +125,198 @@ def _cycle_colors(n):
     return colors
 
 
-def _cycle_page(spec, res):
+def save_cycle_pdf(res, path, title):
     ids = [cid for cid in res.country_ids if cid in res.filtered_probs]
     n = len(ids)
     colors = _cycle_colors(n)
-    fig, ax = plt.subplots(figsize=(11, 8.5))
+    fig, ax = plt.subplots(figsize=(10.2, 5.6))
     for i, cid in enumerate(ids):
         d = res.filtered_probs[cid]
-        ax.plot(d["time"], d["cycle"], color=colors[i], lw=0.9, alpha=0.9)
-    ax.axhline(0.0, color="k", lw=0.6, alpha=0.5)
+        ax.plot(d["time"], d["cycle"], color=colors[i], lw=0.85, alpha=0.9)
+    ax.axhline(0.0, color="k", lw=0.5, alpha=0.5)
     ax.set_xlabel("Year")
-    ax.set_ylabel("cycle (trend removed)")
-    ax.set_title(spec["title"] + " — detrended series")
-    ax.grid(True, alpha=0.3)
+    ax.set_ylabel("Cycle (trend removed)")
+    ax.set_title(title)
+    ax.grid(True, alpha=0.25)
     fig.tight_layout()
-    return fig
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, format="pdf", bbox_inches="tight")
+    plt.close(fig)
 
 
-def _toc_page():
-    fig = plt.figure(figsize=(11, 8.5))
-    fig.suptitle("Panel MS-AR(1): SOE log real GDP per worker", fontsize=16, fontweight="bold", y=0.92)
-    fig.text(0.5, 0.86, "Contents", ha="center", fontsize=13, fontweight="bold")
-    lines = [
-        ("1.", "Model", "2"),
-        ("2.", "Common intercept and linear trend", "3"),
-        ("3.", "Country-specific intercepts, common linear trend", "5"),
-        ("4.", "Country-specific intercepts and linear trends", "7"),
-        ("5.", "Country-specific CF filtered trend (25 years)", "9"),
-        ("6.", "CF filtered trend, all regime means restricted to 0", "11"),
-        ("7.", "CF filtered trend, common rho", "13"),
+def _pair_rows(name, vals, ses, k, pinned=None):
+    est = [name] + [_tex_est(vals[s]) for s in range(k)]
+    se = [""] + [
+        _tex_se(
+            _se_at(ses, s),
+            pinned=bool(pinned[s]) if pinned is not None else False,
+        )
+        for s in range(k)
     ]
-    y = 0.76
-    for num, title, page in lines:
-        fig.text(0.16, y, f"{num}  {title}", ha="left", va="center", fontsize=12)
-        fig.text(0.84, y, page, ha="right", va="center", fontsize=12)
-        y -= 0.07
-    fig.text(
-        0.16, 0.18,
-        "Each empirical section has a table of regime AR(1) estimates\n"
-        "(standard errors in parentheses) and a plot of country cycles.",
-        ha="left", va="top", fontsize=10, color="0.25",
+    return est, se
+
+
+def _tabular(res):
+    k = res.n_regimes
+    mid = k // 2
+    pr = res.params
+    se = res.se_params
+    mu = _as1d(pr["mu"], k)
+    sig = _as1d(pr["sigma"], k)
+    rho = _as1d(pr["rho"], k)
+    P = np.asarray(pr["P"], dtype=float)
+    se_mu = np.atleast_1d(se["mu"]) if se is not None else None
+    se_sig = np.atleast_1d(se["sigma"]) if se is not None else None
+    se_rho = np.atleast_1d(se["rho"]) if se is not None else None
+    se_P = np.asarray(se["P"]) if se is not None and "P" in se else None
+    pin_mu = np.zeros(k, dtype=bool)
+    if res.zero_mu:
+        pin_mu[:] = True
+    else:
+        pin_mu[mid] = True
+
+    rows = []
+    if res.common_rho:
+        r = np.full(k, float(rho[0]))
+        sr = np.full(k, np.nan)
+        if se_rho is not None:
+            sr[:] = _se_at(se_rho, 0)
+        pairs = [
+            (r"$\mu$", mu, se_mu, pin_mu),
+            (r"$\sigma$", sig, se_sig, None),
+            (r"$\rho$ (common)", r, sr, None),
+        ]
+    else:
+        pairs = [
+            (r"$\mu$", mu, se_mu, pin_mu),
+            (r"$\sigma$", sig, se_sig, None),
+            (r"$\rho$", rho, se_rho, None),
+        ]
+    for name, vals, ses, pin in pairs:
+        rows.extend(_pair_rows(name, vals, ses, k, pin))
+    for i in range(k):
+        se_row = se_P[i] if se_P is not None else None
+        rows.extend(_pair_rows(rf"$\Pi_{{{i}\cdot}}$", P[i], se_row, k))
+
+    header = " & ".join([""] + [rf"({s})" for s in range(k)]) + r" \\"
+    body = []
+    for i, row in enumerate(rows):
+        line = " & ".join(row) + r" \\"
+        if i % 2 == 1:
+            line += r" \addlinespace"
+        body.append(line)
+    col = "l" + "c" * k
+    return (
+        "\\begin{tabular}{" + col + "}\n"
+        "\\toprule\n"
+        + header
+        + "\n\\midrule\n"
+        + "\n".join(body)
+        + "\n\\bottomrule\n\\end{tabular}"
     )
-    return fig
 
 
-def _model_page():
-    fig = plt.figure(figsize=(11, 8.5))
-    fig.suptitle("1. Model", fontsize=14, fontweight="bold", y=0.95)
-    y = 0.88
-    fig.text(
-        0.12, y,
-        "Joint panel Markov-switching AR(1) around a trend. Three regimes.",
-        fontsize=11,
-    )
-    y -= 0.08
-    eqs = [
-        r"$y_{it} = a_i + g_i\, t + z_{it}$",
-        r"$z_{i,t+1} = (1-\rho(s_{it}))\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}$",
-        r"$s_{i,t+1}$ drawn from row $s_{it}$ of Pi",
+def _trend_note(res):
+    pr = res.params
+    se = res.se_params or {}
+    bits = []
+    if res.two_step == "cf":
+        bits.append(
+            rf"Christiano--Fitzgerald low-pass trend: periods longer than "
+            rf"{res.cf_high:.0f} observations ({res.cf_cutoff:g} years)."
+        )
+        return " ".join(bits)
+    a, g = pr.get("a"), pr.get("g")
+    if res.country_intercepts and isinstance(a, dict):
+        aa = np.array(list(a.values()), dtype=float)
+        bits.append(
+            rf"Country intercepts $a_i$: mean {aa.mean():.3f}, "
+            rf"min {aa.min():.3f}, max {aa.max():.3f}."
+        )
+    elif a is not None and not isinstance(a, dict):
+        sa = se.get("a")
+        extra = f" ({float(sa):.4f})" if sa is not None and np.isfinite(sa) else ""
+        bits.append(rf"Common intercept $a={float(a):.4f}${extra}.")
+    if res.country_trends and isinstance(g, dict):
+        gg = np.array(list(g.values()), dtype=float)
+        bits.append(
+            rf"Country slopes $g_i$: mean {gg.mean():.4f}, "
+            rf"min {gg.min():.4f}, max {gg.max():.4f}."
+        )
+    elif g is not None and not isinstance(g, dict):
+        sg = se.get("g")
+        extra = f" ({float(sg):.4f})" if sg is not None and np.isfinite(sg) else ""
+        bits.append(rf"Common slope $g={float(g):.4f}${extra}.")
+    return " ".join(bits)
+
+
+def _tex_report(sample_line, fitted):
+    parts = [
+        r"\documentclass[11pt]{article}",
+        r"\usepackage[margin=1in]{geometry}",
+        r"\usepackage{amsmath,amssymb,booktabs,graphicx,setspace,caption,hyperref}",
+        r"\usepackage[T1]{fontenc}",
+        r"\usepackage{lmodern}",
+        r"\setlength{\parindent}{0pt}",
+        r"\setlength{\parskip}{0.6em}",
+        r"\captionsetup{font=small,skip=6pt}",
+        r"\title{Panel MS-AR(1) on SOE log real GDP per worker}",
+        r"\author{}",
+        r"\date{}",
+        r"\begin{document}",
+        r"\maketitle",
+        r"\tableofcontents",
+        r"\newpage",
+        r"\section{Model}",
+        r"Joint panel Markov-switching AR(1) around a trend, with three regimes:",
+        r"\begin{align}",
+        r"y_{it} &= a_i + g_i\, t + z_{it}, \\",
+        r"z_{i,t+1} &= \bigl(1-\rho(s_{it})\bigr)\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}, \\",
+        r"s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}).",
+        r"\end{align}",
+        r"Countries are independent given shared Markov parameters; latent paths "
+        r"$s_{it}$ are country-specific. The regime dated $t$ governs the transition "
+        r"from $z_t$ to $z_{t+1}$. $\sigma$ switches with the regime. Unless noted, "
+        r"$\rho$ is regime-specific and the median $\mu$ is pinned at 0 after ordering. "
+        r"The likelihood is a Hamilton filter per country, summed across the panel.",
+        r"\subsection*{Trend assumptions}",
+        r"\begin{enumerate}",
+        r"\item Common intercept $a$ and common linear slope $g$ (joint MLE).",
+        r"\item Country intercepts $a_i$ and common $g$ ($a_i$ profiled).",
+        r"\item Country intercepts $a_i$ and slopes $g_i$ (both profiled).",
+        r"\item Country-specific Christiano--Fitzgerald low-pass trend "
+        r"(cycle $=$ oscillations of 2--100 quarters / 25 years), then MS-AR on the cycle.",
+        r"\item Same CF trend, with every $\mu(s)=0$.",
+        r"\item Same CF trend, with one $\rho$ common to all regimes.",
+        r"\end{enumerate}",
+        r"Sections 4--6 are two-step: the trend is not re-estimated jointly with the cycle.",
+        r"Standard errors (in parentheses) are delta-method from a numerical Hessian on "
+        r"shared parameters only. A dashed entry is a pinned coefficient.",
     ]
-    for eq in eqs:
-        fig.text(0.16, y, eq, ha="left", va="center", fontsize=13)
-        y -= 0.055
-    y -= 0.02
-    para = [
-        r"Countries are independent given shared Markov parameters; latent paths $s_{it}$",
-        r"are country-specific. The regime dated $t$ governs the transition from $z_t$ to $z_{t+1}$.",
-        r"$\sigma$ switches with the regime. Unless noted, $\rho$ is regime-specific and the median",
-        r"$\mu$ is pinned at 0 after ordering. Likelihood: Hamilton filter per country, summed.",
-    ]
-    for line in para:
-        fig.text(0.12, y, line, ha="left", va="top", fontsize=10)
-        y -= 0.035
-    y -= 0.03
-    fig.text(0.12, y, "Trend assumptions in this report", fontsize=12, fontweight="bold")
-    y -= 0.05
-    bullets = [
-        r"2. Common $a$ and common linear $g$ (joint MLE).",
-        r"3. Country intercepts $a_i$, common $g$ ($a_i$ profiled).",
-        r"4. Country intercepts $a_i$ and slopes $g_i$ (both profiled).",
-        r"5. Country-specific Christiano-Fitzgerald low-pass trend",
-        r"    (cycle = periods of 2-100 quarters / 25 years), then MS-AR on the cycle.",
-        r"6. Same CF trend as 5, with every $\mu(s)=0$.",
-        r"7. Same CF trend as 5, with one $\rho$ common to all regimes.",
-        "Sections 5-7 are two-step (not joint MLE of trend and cycle).",
-    ]
-    for b in bullets:
-        fig.text(0.14, y, b, ha="left", va="top", fontsize=10)
-        y -= 0.048
-    return fig
+    for spec, res, fig in fitted:
+        se_note = ""
+        if res.se_params is None:
+            se_note = " Standard errors omitted."
+        parts += [
+            r"\newpage",
+            rf"\section{{{spec['title']}}}",
+            sample_line + rf" Fitted countries: {res.n_countries}. "
+            rf"Observations: {res.nobs}. Log-likelihood: {res.loglik:.2f}."
+            + se_note,
+            _trend_note(res),
+            r"\begin{table}[h]",
+            r"\centering",
+            r"\caption{Regime AR(1) and transition matrix. Columns are regimes.}",
+            _tabular(res),
+            r"\end{table}",
+            r"\begin{figure}[h]",
+            r"\centering",
+            rf"\includegraphics[width=\textwidth]{{{fig.as_posix()}}}",
+            r"\caption{Country cycles after removing the section's trend.}",
+            r"\end{figure}",
+        ]
+    parts.append(r"\end{document}")
+    return "\n".join(parts) + "\n"
 
 
 def fit_spec(df, spec, verbose=True):
@@ -339,7 +341,7 @@ def fit_spec(df, spec, verbose=True):
         n_starts=8,
         maxiter=400,
         seed=1,
-        compute_se=True,
+        compute_se=spec["compute_se"],
         store_filtered=True,
         verbose=verbose,
     )
@@ -350,7 +352,7 @@ def fit_spec(df, spec, verbose=True):
         f"country_intercepts={spec['country_intercepts']}  "
         f"country_trends={spec['country_trends']}  "
         f"zero_mu={spec['zero_mu']}  common_rho={spec['common_rho']}  "
-        f"cf_cutoff=25  compute_se=True\n\n"
+        f"cf_cutoff=25  compute_se={spec['compute_se']}\n\n"
     )
     txt.write_text(header + res.summary() + "\n", encoding="utf-8")
     print(res, flush=True)
@@ -358,33 +360,51 @@ def fit_spec(df, spec, verbose=True):
     return res
 
 
+def compile_tex(tex_path: Path):
+    cmd = [
+        "pdflatex",
+        "-interaction=nonstopmode",
+        "-halt-on-error",
+        tex_path.name,
+    ]
+    for _ in range(2):
+        subprocess.run(
+            cmd,
+            cwd=str(tex_path.parent),
+            check=True,
+        )
+
+
 def main():
     df = load_panel()
     sample_line = (
-        f"SOE sample: log real GDP per worker    "
-        f"countries in file={df.country.nunique()}    obs={len(df)}    "
-        f"{df.period.min()}–{df.period.max()}"
+        rf"SOE sample: log real GDP per worker. "
+        rf"{df.country.nunique()} countries in the file, {len(df)} observations, "
+        rf"{df.period.min()}--{df.period.max()}."
     )
     print(sample_line, flush=True)
+    FIGS.mkdir(exist_ok=True)
     fitted = []
     for spec in SPECS:
         res = fit_spec(df, spec)
-        fitted.append((spec, res))
-    with PdfPages(OUT_PDF) as pdf:
-        fig = _toc_page()
-        pdf.savefig(fig)
-        plt.close(fig)
-        fig = _model_page()
-        pdf.savefig(fig)
-        plt.close(fig)
-        for spec, res in fitted:
-            fig = _table_page(spec, res, sample_line)
-            pdf.savefig(fig)
-            plt.close(fig)
-            fig = _cycle_page(spec, res)
-            pdf.savefig(fig)
-            plt.close(fig)
-    print(f"\nWrote {OUT_PDF}", flush=True)
+        fig = FIGS / f"cycle_{spec['key']}.pdf"
+        save_cycle_pdf(res, fig, spec["title"])
+        # graphicx path relative to the .tex file in HERE
+        rel = fig.relative_to(HERE).as_posix()
+        fitted.append((spec, res, Path(rel)))
+        aa = res.params.get("a")
+        if spec["country_intercepts"] and isinstance(aa, dict):
+            vals = np.array(list(aa.values()), float)
+            print(
+                f"  a_i mean={vals.mean():.4f}  min={vals.min():.4f}  "
+                f"max={vals.max():.4f}  cycle mean="
+                f"{np.mean([d['cycle'].mean() for d in res.filtered_probs.values()]):.4f}",
+                flush=True,
+            )
+    TEX.write_text(_tex_report(sample_line, fitted), encoding="utf-8")
+    compile_tex(TEX)
+    produced = HERE / "soe_msar_specs.pdf"
+    print(f"\nWrote {produced}", flush=True)
 
 
 if __name__ == "__main__":
