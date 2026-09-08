@@ -2,7 +2,7 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb,booktabs,graphicx,setspace,caption,hyperref}
 \usepackage[T1]{fontenc}
-\usepackage{lmodern}
+\usepackage{mathpazo}
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0.6em}
 \captionsetup{font=small,skip=6pt}
@@ -12,14 +12,15 @@
 \begin{document}
 \maketitle
 \tableofcontents
-\newpage
+\clearpage
 \section{Model}
 Joint panel Markov-switching AR(1) around a trend, with three regimes:
 \begin{align}
-y_{it} &= a_i + g_i\, t + z_{it}, \\
+y_{it} &= \tau_{it} + z_{it}, \\
 z_{i,t+1} &= \bigl(1-\rho(s_{it})\bigr)\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}, \\
 s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}).
 \end{align}
+Here $\tau_{it}$ is a (possibly country-specific) trend in calendar time; the six specifications below differ in how $\tau_{it}$ is constructed.
 Countries are independent given shared Markov parameters; latent paths $s_{it}$ are country-specific. The regime dated $t$ governs the transition from $z_t$ to $z_{t+1}$. $\sigma$ switches with the regime. Unless noted, $\rho$ is regime-specific and the median $\mu$ is pinned at 0 after ordering. The likelihood is a Hamilton filter per country, summed across the panel.
 \subsection*{Trend assumptions}
 \begin{enumerate}
@@ -32,7 +33,7 @@ Countries are independent given shared Markov parameters; latent paths $s_{it}$ 
 \end{enumerate}
 Sections 4--6 are two-step: the trend is not re-estimated jointly with the cycle.
 Standard errors (in parentheses) are delta-method from a numerical Hessian on shared parameters only. A dashed entry is a pinned coefficient.
-\newpage
+\clearpage
 \section{Common intercept and linear trend}
 SOE sample: log real GDP per worker. 62 countries in the file, 7004 observations, 1950-Q1--2024-Q3. Fitted countries: 62. Observations: 7004. Log-likelihood: 17917.39.
 Common intercept $a=-4.0009$. Common slope $g=0.0139$.
@@ -60,10 +61,10 @@ $\Pi_{2\cdot}$ & 0.0812 & 0.1445 & 0.7743 \\
 \end{table}
 \begin{figure}[h]
 \centering
-\includegraphics[width=\textwidth]{figs/cycle_1_common_ag.pdf}
+\includegraphics[width=0.75\textwidth]{figs/cycle_1_common_ag.pdf}
 \caption{Country cycles after removing the section's trend.}
 \end{figure}
-\newpage
+\clearpage
 \section{Country-specific intercepts, common linear trend}
 SOE sample: log real GDP per worker. 62 countries in the file, 7004 observations, 1950-Q1--2024-Q3. Fitted countries: 62. Observations: 7004. Log-likelihood: 18079.16. Standard errors omitted.
 Country intercepts $a_i$: mean -3.863, min -10.356, max 2.154. Common slope $g=0.0115$.
@@ -91,10 +92,10 @@ $\Pi_{2\cdot}$ & 0.0232 & 0.0106 & 0.9662 \\
 \end{table}
 \begin{figure}[h]
 \centering
-\includegraphics[width=\textwidth]{figs/cycle_2_ai_common_g.pdf}
+\includegraphics[width=0.75\textwidth]{figs/cycle_2_ai_common_g.pdf}
 \caption{Country cycles after removing the section's trend.}
 \end{figure}
-\newpage
+\clearpage
 \section{Country-specific intercepts and linear trends}
 SOE sample: log real GDP per worker. 62 countries in the file, 7004 observations, 1950-Q1--2024-Q3. Fitted countries: 62. Observations: 7004. Log-likelihood: 18357.24.
 Country intercepts $a_i$: mean -3.974, min -13.117, max 2.031. Country slopes $g_i$: mean 0.0140, min -0.0309, max 0.0547.
@@ -122,10 +123,10 @@ $\Pi_{2\cdot}$ & 0.0172 & 0.0179 & 0.9648 \\
 \end{table}
 \begin{figure}[h]
 \centering
-\includegraphics[width=\textwidth]{figs/cycle_3_ai_gi.pdf}
+\includegraphics[width=0.75\textwidth]{figs/cycle_3_ai_gi.pdf}
 \caption{Country cycles after removing the section's trend.}
 \end{figure}
-\newpage
+\clearpage
 \section{Country-specific CF filtered trend (25 years)}
 SOE sample: log real GDP per worker. 62 countries in the file, 7004 observations, 1950-Q1--2024-Q3. Fitted countries: 62. Observations: 7004. Log-likelihood: 18637.48.
 Christiano--Fitzgerald low-pass trend: periods longer than 100 observations (25 years).
@@ -153,10 +154,10 @@ $\Pi_{2\cdot}$ & 0.0208 & 0.0164 & 0.9628 \\
 \end{table}
 \begin{figure}[h]
 \centering
-\includegraphics[width=\textwidth]{figs/cycle_4_cf.pdf}
+\includegraphics[width=0.75\textwidth]{figs/cycle_4_cf.pdf}
 \caption{Country cycles after removing the section's trend.}
 \end{figure}
-\newpage
+\clearpage
 \section{CF filtered trend, all regime means restricted to 0}
 SOE sample: log real GDP per worker. 62 countries in the file, 7004 observations, 1950-Q1--2024-Q3. Fitted countries: 62. Observations: 7004. Log-likelihood: 18632.52.
 Christiano--Fitzgerald low-pass trend: periods longer than 100 observations (25 years).
@@ -184,10 +185,10 @@ $\Pi_{2\cdot}$ & 0.0681 & 0.1613 & 0.7706 \\
 \end{table}
 \begin{figure}[h]
 \centering
-\includegraphics[width=\textwidth]{figs/cycle_5_cf_zero_mu.pdf}
+\includegraphics[width=0.75\textwidth]{figs/cycle_5_cf_zero_mu.pdf}
 \caption{Country cycles after removing the section's trend.}
 \end{figure}
-\newpage
+\clearpage
 \section{CF filtered trend, common $\rho$}
 SOE sample: log real GDP per worker. 62 countries in the file, 7004 observations, 1950-Q1--2024-Q3. Fitted countries: 62. Observations: 7004. Log-likelihood: 18572.70.
 Christiano--Fitzgerald low-pass trend: periods longer than 100 observations (25 years).
@@ -215,7 +216,7 @@ $\Pi_{2\cdot}$ & 0.0191 & 0.0166 & 0.9643 \\
 \end{table}
 \begin{figure}[h]
 \centering
-\includegraphics[width=\textwidth]{figs/cycle_6_cf_common_rho.pdf}
+\includegraphics[width=0.75\textwidth]{figs/cycle_6_cf_common_rho.pdf}
 \caption{Country cycles after removing the section's trend.}
 \end{figure}
 \end{document}

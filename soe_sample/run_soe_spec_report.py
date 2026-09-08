@@ -256,7 +256,7 @@ def _tex_report(sample_line, fitted):
         r"\usepackage[margin=1in]{geometry}",
         r"\usepackage{amsmath,amssymb,booktabs,graphicx,setspace,caption,hyperref}",
         r"\usepackage[T1]{fontenc}",
-        r"\usepackage{lmodern}",
+        r"\usepackage{mathpazo}",
         r"\setlength{\parindent}{0pt}",
         r"\setlength{\parskip}{0.6em}",
         r"\captionsetup{font=small,skip=6pt}",
@@ -270,10 +270,12 @@ def _tex_report(sample_line, fitted):
         r"\section{Model}",
         r"Joint panel Markov-switching AR(1) around a trend, with three regimes:",
         r"\begin{align}",
-        r"y_{it} &= a_i + g_i\, t + z_{it}, \\",
+        r"y_{it} &= \tau_{it} + z_{it}, \\",
         r"z_{i,t+1} &= \bigl(1-\rho(s_{it})\bigr)\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}, \\",
         r"s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}).",
         r"\end{align}",
+        r"Here $\tau_{it}$ is a (possibly country-specific) trend in calendar time; "
+        r"the six specifications below differ in how $\tau_{it}$ is constructed. "
         r"Countries are independent given shared Markov parameters; latent paths "
         r"$s_{it}$ are country-specific. The regime dated $t$ governs the transition "
         r"from $z_t$ to $z_{t+1}$. $\sigma$ switches with the regime. Unless noted, "
@@ -298,7 +300,7 @@ def _tex_report(sample_line, fitted):
         if res.se_params is None:
             se_note = " Standard errors omitted."
         parts += [
-            r"\newpage",
+            r"\clearpage",
             rf"\section{{{spec['title']}}}",
             sample_line + rf" Fitted countries: {res.n_countries}. "
             rf"Observations: {res.nobs}. Log-likelihood: {res.loglik:.2f}."
@@ -311,7 +313,7 @@ def _tex_report(sample_line, fitted):
             r"\end{table}",
             r"\begin{figure}[h]",
             r"\centering",
-            rf"\includegraphics[width=\textwidth]{{{fig.as_posix()}}}",
+            rf"\includegraphics[width=0.75\textwidth]{{{fig.as_posix()}}}",
             r"\caption{Country cycles after removing the section's trend.}",
             r"\end{figure}",
         ]
