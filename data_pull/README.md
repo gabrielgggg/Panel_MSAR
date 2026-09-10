@@ -102,14 +102,21 @@ IMF QNEA publishes both `SA` and `NSA`.
 
 * If a country has **any** SA constant-price GDP, **all** of that country’s
   GDP observations come from SA (NSA is ignored for that country).
-* Otherwise the country is filled from NSA **GDP**, and `gdp_per_worker`
-  is then seasonally adjusted with statsmodels `SARIMAX` (see below).
+* Otherwise the country is filled from NSA **GDP**. Optionally,
+  `gdp_per_worker` is then seasonally adjusted with statsmodels `SARIMAX`
+  (off by default; see below).
 
 IMF SA and NSA GDP are never spliced inside one country. `gdp_sa` is `SA`
 (IMF), `SARIMAX` (NSA GDP, then SARIMAX-adjusted), or `NSA` (too short to
 adjust).
 
-### SARIMAX adjustment of NSA countries
+### SARIMAX adjustment of NSA countries (optional)
+
+Off by default. Enable with `build_panel(..., sarimax_nsa=True)` or
+
+```text
+python build_gdp_per_worker.py --sarimax-nsa
+```
 
 NSA GDP (and typically NSA employment) leaves seasonality in
 `gdp_per_worker`. For those countries, if there are at least 12 observations

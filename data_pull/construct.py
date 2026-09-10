@@ -82,15 +82,17 @@ Annual observations are treated as annual averages located at mid-year
 Interpolation is linear in ``t`` and is **not** extrapolated outside the
 closed interval between the first and last annual observation.
 
-NSA countries: SARIMAX seasonal adjustment
-------------------------------------------
+NSA countries: optional SARIMAX seasonal adjustment
+---------------------------------------------------
 If QNEA has no SA GDP, the constructed ``gdp_per_worker`` is still seasonal
-(NSA GDP, and often NSA employment). Those countries are then adjusted with
-statsmodels ``SARIMAX`` on log ``gdp_per_worker``: linear trend, quarterly
-dummies (calendar quarter, not positional), ARMA errors, ``d=0`` so dummy
-coefficients are level seasonal factors. Factors are recentered to sum to
-zero. ``gdp_sa`` becomes ``SARIMAX``. Spells shorter than ``MIN_T_SARIMAX``
-or missing a calendar quarter stay ``NSA``.
+(NSA GDP, and often NSA employment). When ``sarimax_nsa=True``, those
+countries are adjusted with statsmodels ``SARIMAX`` on log
+``gdp_per_worker``: linear trend, quarterly dummies (calendar quarter, not
+positional), ARMA errors, ``d=0`` so dummy coefficients are level seasonal
+factors. Factors are recentered to sum to zero. ``gdp_sa`` becomes
+``SARIMAX``. Spells shorter than ``MIN_T_SARIMAX`` or missing a calendar
+quarter stay ``NSA``. The default is ``sarimax_nsa=False`` (leave NSA as
+published).
 
 Country sample
 --------------
@@ -1066,12 +1068,16 @@ def build_panel(
     ilo_modelled_a: pd.DataFrame,
     country_names: pd.DataFrame | None = None,
     base_year: int = BASE_YEAR,
+    sarimax_nsa: bool = False,
 ) -> pd.DataFrame:
     """Run the full construction. All arguments are **raw** IMF/ILO extracts.
 
     This is the function tests should call: it is the shipped entry point
     from in-memory frames (the CLI only downloads then reads CSV into these
     arguments).
+
+    ``sarimax_nsa``: if True, seasonally adjust NSA countries with SARIMAX
+    (see ``seasonally_adjust_nsa_countries``). Default False.
     """
     sa = tidy_imf_gdp(qnea_sa, frequency="Q", adjustment="SA")
     nsa = tidy_imf_gdp(qnea_nsa, frequency="Q", adjustment="NSA")
@@ -1129,7 +1135,8 @@ def build_panel(
     panel = panel.loc[gpw.notna() & np.isfinite(gpw.to_numpy(dtype=float)) & (gpw > 0)]
     panel["time"] = panel["year"] + (panel["quarter"] - 1.0) / 4.0
     panel["metadata"] = panel.apply(compose_metadata, axis=1)
-    panel = seasonally_adjust_nsa_countries(panel)
+    if sarimax_nsa:
+        panel = seasonally_adjust_nsa_countries(panel)
 
     if country_names is not None and not country_names.empty:
         names = country_names.copy()

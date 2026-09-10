@@ -238,13 +238,14 @@ never spliced inside a country:
 \begin{itemize}
 \item If a country has any SA constant-price GDP, all of that country's GDP
 observations come from SA.
-\item Otherwise GDP is NSA. Productivity is then seasonally adjusted with
-statsmodels SARIMAX when the spell is long enough.
+\item Otherwise GDP is NSA. Optionally, productivity is then seasonally
+adjusted with statsmodels SARIMAX when the spell is long enough
+(\texttt{sarimax\_nsa=True} / \texttt{--sarimax-nsa}; \textbf{off by default}).
 \end{itemize}
 
-\paragraph{SARIMAX on NSA countries.}
+\paragraph{SARIMAX on NSA countries (optional, default off).}
 NSA GDP, and typically NSA employment, leave seasonality in the productivity
-ratio. For those countries, if there are at least 12 observations covering
+ratio. When the flag is on, and there are at least 12 observations covering
 all four calendar quarters, we fit
 \begin{equation}
 \log(\text{gdp per worker})_{t}
@@ -263,10 +264,8 @@ quarter, not the row position. After adjustment,
 to \texttt{SARIMAX}.
 
 Spells shorter than 12 quarters, or missing a calendar quarter, stay
-\texttt{NSA}. In the current vintage that is Ghana (11), El Salvador (10),
-Belarus (6), Bangladesh (4), Botswana (2), and Mozambique (2).
-
-The current vintage: 68 IMF-SA, 27 SARIMAX, 6 remaining NSA.
+\texttt{NSA}. With the flag off, all 33 IMF-NSA countries remain
+\texttt{NSA} (including long spells such as Russia and Sri Lanka).
 
 \section{Exchange rates, including the euro}
 
@@ -462,7 +461,7 @@ and dropping of IMF staff projections.
 Countries & 101 \\
 Observations & 7{,}450 \\
 Span & 1950Q1--2026Q2 (unbalanced) \\
-GDP SA / SARIMAX / NSA (country-level) & 68 / 27 / 6 \\
+GDP SA / SARIMAX / NSA (country-level) & 68 / 0 / 33 \\
 Employment: official quarterly / interpolated annual & 86 / 15 \\
 United States, 2015 mean GDP per worker & $\$122{,}925$ \\
 Germany, 2015 mean GDP per worker & $\$85{,}222$ \\

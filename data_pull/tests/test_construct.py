@@ -601,6 +601,55 @@ class TestBuildPanelEntryPoint(unittest.TestCase):
             panel.emp_source.str.contains("annual", case=False).all()
         )
 
+    def test_sarimax_nsa_flag_default_off(self):
+        raw = _raw_with_nsa_country()
+        off = build_panel(**raw)
+        on = build_panel(**raw, sarimax_nsa=True)
+        nsa_off = off.loc[off.country == "CCC", "gdp_sa"]
+        nsa_on = on.loc[on.country == "CCC", "gdp_sa"]
+        self.assertGreater(len(nsa_off), 0)
+        self.assertTrue((nsa_off == "NSA").all())
+        self.assertTrue((nsa_on == "SARIMAX").all())
+        # IMF-SA countries are never sent through SARIMAX.
+        self.assertTrue((off.loc[off.country == "AAA", "gdp_sa"] == "SA").all())
+        self.assertTrue((on.loc[on.country == "AAA", "gdp_sa"] == "SA").all())
+
+
+def _raw_with_nsa_country() -> dict:
+    """Minimal panel plus an NSA-only country with 16 quarters (SARIMAX-eligible)."""
+    raw = _minimal_raw_for_panel()
+    years = list(range(BASE_YEAR, BASE_YEAR + 4))
+    periods = [f"{y}-Q{q}" for y in years for q in (1, 2, 3, 4)]
+    times_q = [f"{y}Q{q}" for y in years for q in (1, 2, 3, 4)]
+    # Mild seasonal pattern in LCU flows so the SARIMAX dummies have signal.
+    seas = [11.0, 9.0, 8.5, 11.5]
+    vals = (seas * 4)
+    raw["qnea_nsa"] = pd.concat(
+        [raw["qnea_nsa"], _imf_q("CCC", periods, vals, sa="NSA")],
+        ignore_index=True,
+    )
+    raw["anea_real"] = pd.concat(
+        [raw["anea_real"], _imf_a("CCC", [BASE_YEAR], [sum(seas)])],
+        ignore_index=True,
+    )
+    raw["anea_nom"] = pd.concat(
+        [raw["anea_nom"], _imf_a("CCC", [BASE_YEAR], [sum(seas)])],
+        ignore_index=True,
+    )
+    raw["er_annual"] = pd.concat(
+        [raw["er_annual"], _fx("CCC", BASE_YEAR, 2.0)],
+        ignore_index=True,
+    )
+    raw["ilo_official_q"] = pd.concat(
+        [raw["ilo_official_q"], _ilo("CCC", times_q, [1] * 16)],
+        ignore_index=True,
+    )
+    raw["country_names"] = pd.concat(
+        [raw["country_names"], pd.DataFrame({"iso3": ["CCC"], "country_name": ["NsaToy"]})],
+        ignore_index=True,
+    )
+    return raw
+
 
 if __name__ == "__main__":
     unittest.main()

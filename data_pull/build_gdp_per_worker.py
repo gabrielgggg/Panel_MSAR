@@ -3,6 +3,7 @@
 Usage (from this folder)::
 
     python build_gdp_per_worker.py
+    python build_gdp_per_worker.py --sarimax-nsa
     python build_gdp_per_worker.py --force-download
 
 Writes:
@@ -38,6 +39,14 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="re-download IMF/ILO extracts even if raw/ already exists",
     )
+    p.add_argument(
+        "--sarimax-nsa",
+        action="store_true",
+        help=(
+            "seasonally adjust NSA countries with statsmodels SARIMAX "
+            "(off by default; IMF-SA countries are never passed through this)"
+        ),
+    )
     args = p.parse_args(argv)
 
     ensure_raw(force=args.force_download)
@@ -52,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         ilo_official_a=frames["ilo_official_a"],
         ilo_modelled_a=frames["ilo_modelled_a"],
         country_names=frames["country_names"],
+        sarimax_nsa=args.sarimax_nsa,
     )
     cov = coverage_table(panel)
 
@@ -81,7 +91,8 @@ def main(argv: list[str] | None = None) -> int:
         f"units: constant 2015 USD at 2015 market FX (not PPP)\n"
         f"countries={n_c}  obs={n_obs}  {t0}–{t1}\n"
         f"GDP seasonal adjustment (country-level): "
-        f"SA={sa_c}  SARIMAX={sarimax_c}  NSA={nsa_c}\n"
+        f"SA={sa_c}  SARIMAX={sarimax_c}  NSA={nsa_c}  "
+        f"(sarimax_nsa={args.sarimax_nsa})\n"
         f"employment source (country-level, first token):\n{emp_kind}\n"
         f"wrote {panel_path}\n"
         f"wrote {cov_path}\n"
