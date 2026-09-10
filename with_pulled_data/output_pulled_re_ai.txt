@@ -1,0 +1,55 @@
+Pulled log real GDP per worker from 1970Q1
+source=C:/Dropbox/Shared_Research/World_Financial_Cycle_and_Global_Trade/4.Code/regime_switch_panel/data_pull/output/gdp_per_worker_q.csv
+Random-effects intercepts, common linear trend
+random_intercepts=True  rho_max=0.995  compute_se=True
+
+Joint panel MS-AR(1) + common log-linear trend
+Regimes: 3    Countries: 92    Observations: 6787
+Log-likelihood: 15090.4976
+Converged: True    CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+
+Regimes ordered by mu; median regime 1 has mu pinned at 0.
+alpha (RE)          9.8429
+                  (0.0823)
+omega (RE)          0.7204
+                  (0.0238)
+a (post. mean)mean=9.8449  min=7.9959  max=11.6838
+g                   0.0084
+                  (0.0008)
+
+Regime parameters
+                         0           1           2
+mu                 -0.8152      0.0000      0.5277
+                  (0.1955)         (—)    (0.0827)
+sigma               0.1244      0.0271      0.0109
+                  (0.0032)    (0.0006)    (0.0002)
+rho                 0.9804      0.9950      0.9950
+                  (0.0081)    (0.0002)    (0.0000)
+
+Transition matrix Pi [from \ to]
+                         0           1           2
+from 0              0.9351      0.0490      0.0159
+                  (0.0096)    (0.0089)    (0.0051)
+from 1              0.0123      0.9700      0.0177
+                  (0.0027)    (0.0041)    (0.0033)
+from 2              0.0125      0.0126      0.9749
+                  (0.0028)    (0.0033)    (0.0033)
+pi                  0.1605      0.4323      0.4071
+                  (0.0209)    (0.0329)    (0.0339)
+E[z] ergodic       -0.1636
+                  (0.1083)
+
+Dropped countries:
+  BGD: only 4 observations (min_t=12)
+  BLR: only 6 observations (min_t=12)
+  BWA: only 2 observations (min_t=12)
+  GHA: only 11 observations (min_t=12)
+  KEN: only 8 observations (min_t=12)
+  MOZ: only 2 observations (min_t=12)
+  PAK: longest contiguous spell has 8 observations (min_t=12); gaps in calendar time were split rather than interpolated
+  SAU: only 8 observations (min_t=12)
+  SLV: only 10 observations (min_t=12)
+
+Warnings:
+  - Countries do not share a common time increment (range 0.25 to 0.5). The AR(1) treats consecutive rows as lag-1 regardless of the calendar gap; g is per unit of `time`.
+  - Regime standard deviations differ by more than 10x; one sigma may have exploded.

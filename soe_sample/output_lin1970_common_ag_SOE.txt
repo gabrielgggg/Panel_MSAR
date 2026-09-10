@@ -1,0 +1,37 @@
+SOE log real GDP per worker from 1970Q1
+Common intercept and linear trend
+n_regimes=3  country_intercepts=False  country_trends=False  common_rho=False  rho_max=0.995  compute_se=True
+
+Joint panel MS-AR(1) + common log-linear trend
+Regimes: 3    Countries: 62    Observations: 6924
+Log-likelihood: 16652.3121
+Converged: True    CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH
+
+Regimes ordered by mu; median regime 1 has mu pinned at 0.
+g                   0.0124
+                  (0.0009)
+
+Regime parameters
+                         0           1           2
+mu                 -0.6834      0.0000      1.3119
+                  (0.1942)         (—)    (0.2051)
+sigma               0.0109      0.1086      0.0242
+                  (0.0002)    (0.0050)    (0.0004)
+rho                 0.9950      0.9950      0.9950
+                  (0.0000)    (0.0000)    (0.0000)
+
+Transition matrix Pi [from \ to]
+                         0           1           2
+from 0              0.9706      0.0198      0.0096
+                  (0.0036)    (0.0035)    (0.0031)
+from 1              0.0714      0.7053      0.2233
+                  (0.0192)    (0.0386)    (0.0376)
+from 2              0.0149      0.0206      0.9646
+                  (0.0032)    (0.0038)    (0.0044)
+pi                  0.4181      0.0642      0.5177
+                  (0.0366)    (0.0085)    (0.0360)
+E[z] ergodic        0.3934
+                  (0.1970)
+
+Warnings:
+  - Regime standard deviations differ by more than 10x; one sigma may have exploded.
