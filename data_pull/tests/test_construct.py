@@ -37,6 +37,8 @@ from construct import (  # noqa: E402
     power10_unit_factor,
     quarter_midpoint,
     rebase_quarter_to_base_usd,
+    sarimax_log_seasonal_adjust,
+    seasonally_adjust_nsa_countries,
     tidy_ilo_employment,
     tidy_imf_fx_annual,
     tidy_imf_gdp,
@@ -324,6 +326,70 @@ class TestUnitBreaksAndEmpPatches(unittest.TestCase):
         # Interpolated annual at 2017 mid-year is 3.7m; 0.9m / 3.7m < 0.4.
         self.assertTrue((patched.emp_persons > 3_000_000).all())
         self.assertTrue(patched.emp_source.str.contains("replaced").all())
+
+
+class TestSarimaxSeasonalAdjust(unittest.TestCase):
+    def test_quarterly_means_flatten_on_known_seasonal_pattern(self):
+        # 8 years of a trend times a fixed quarterly pattern. After SARIMAX
+        # dummy adjustment, the range of quarter-of-year means of log y
+        # must shrink relative to the raw series (the pattern is identified
+        # from calendar quarter, not position).
+        n = 32
+        quarters = np.array([1, 2, 3, 4] * 8)
+        t = np.arange(n, dtype=float)
+        seas = np.array([1.20, 0.88, 0.85, 1.07])
+        y = 50.0 * (1.01 ** t) * seas[quarters - 1]
+        sa, note = sarimax_log_seasonal_adjust(y, quarters, min_t=12)
+        self.assertIsNotNone(sa)
+        self.assertIn("SARIMAX", note)
+
+        def q_mean_range(vals: np.ndarray) -> float:
+            logs = np.log(vals)
+            means = [float(np.mean(logs[quarters == q])) for q in (1, 2, 3, 4)]
+            return max(means) - min(means)
+
+        self.assertLess(q_mean_range(sa), 0.5 * q_mean_range(y))
+
+    def test_too_short_series_is_not_adjusted(self):
+        y = np.array([1.0, 1.1, 0.9, 1.05, 1.02, 1.12, 0.95, 1.08])
+        q = np.array([1, 2, 3, 4, 1, 2, 3, 4])
+        sa, note = sarimax_log_seasonal_adjust(y, q, min_t=12)
+        self.assertIsNone(sa)
+        self.assertIn("too few", note)
+
+    def test_nsa_countries_adjusted_sa_countries_untouched(self):
+        n = 24
+        quarters = [1, 2, 3, 4] * 6
+        years = [2015 + i // 4 for i in range(n)]
+        periods = [f"{y}-Q{q}" for y, q in zip(years, quarters)]
+        t = np.arange(n, dtype=float)
+        seas = np.array([1.15, 0.90, 0.88, 1.07])
+        nsa_y = 40.0 * (1.008 ** t) * seas[np.array(quarters) - 1]
+        sa_y = 40.0 * (1.008 ** t)  # already flat seasonals
+        panel = pd.DataFrame(
+            {
+                "country": ["NSA"] * n + ["SA0"] * n,
+                "period": periods * 2,
+                "year": years * 2,
+                "quarter": quarters * 2,
+                "gdp_per_worker": np.concatenate([nsa_y, sa_y]),
+                "emp_persons": [1000.0] * (2 * n),
+                "gdp_real_2015usd": np.concatenate([nsa_y, sa_y]) * 1000.0,
+                "gdp_sa": ["NSA"] * n + ["SA"] * n,
+                "metadata": ["orig"] * (2 * n),
+            }
+        )
+        out = seasonally_adjust_nsa_countries(panel, min_t=12)
+        sa0 = out.loc[out.country == "SA0", "gdp_per_worker"].to_numpy()
+        self.assertTrue(np.allclose(sa0, sa_y))
+        self.assertTrue((out.loc[out.country == "SA0", "gdp_sa"] == "SA").all())
+        nsa = out.loc[out.country == "NSA"]
+        self.assertTrue((nsa.gdp_sa == "SARIMAX").all())
+        self.assertTrue(nsa.metadata.str.contains("SARIMAX").all())
+        # Identity gdp_real = gdp_per_worker * emp is restored after SA.
+        self.assertTrue(
+            np.allclose(nsa.gdp_real_2015usd, nsa.gdp_per_worker * nsa.emp_persons)
+        )
 
 
 class TestSeasonalChoice(unittest.TestCase):

@@ -82,6 +82,16 @@ Annual observations are treated as annual averages located at mid-year
 Interpolation is linear in ``t`` and is **not** extrapolated outside the
 closed interval between the first and last annual observation.
 
+NSA countries: SARIMAX seasonal adjustment
+------------------------------------------
+If QNEA has no SA GDP, the constructed ``gdp_per_worker`` is still seasonal
+(NSA GDP, and often NSA employment). Those countries are then adjusted with
+statsmodels ``SARIMAX`` on log ``gdp_per_worker``: linear trend, quarterly
+dummies (calendar quarter, not positional), ARMA errors, ``d=0`` so dummy
+coefficients are level seasonal factors. Factors are recentered to sum to
+zero. ``gdp_sa`` becomes ``SARIMAX``. Spells shorter than ``MIN_T_SARIMAX``
+or missing a calendar quarter stay ``NSA``.
+
 Country sample
 --------------
 Keep ISO 3166-1 alpha-3 codes (and the user-assigned Kosovo code ``KOS``).
@@ -99,6 +109,7 @@ from __future__ import annotations
 
 import math
 import re
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -110,6 +121,9 @@ ILO_THOUSANDS_TO_PERSONS = 1000.0
 # Quarterly QNEA GDP is a non-annualized flow (see module docstring).
 QUARTER_TO_ANNUAL = 4.0
 MIN_OFFICIAL_Q = 8
+# Minimum observed quarters to estimate a quarterly seasonal pattern with
+# SARIMAX (three complete years, all four quarters present).
+MIN_T_SARIMAX = 12
 
 # Euro-area members whose legal tender on 1 Jan 2015 was the euro.
 # Lithuania joined on that date; Latvia (2014), Estonia (2011), Slovakia (2009),
@@ -852,6 +866,162 @@ def select_employment(
     return out.sort_values(["country", "year", "quarter"]).reset_index(drop=True)
 
 
+def _quarter_dummies(quarters: np.ndarray) -> pd.DataFrame:
+    """Q2–Q4 dummies; Q1 is the omitted reference quarter."""
+    q = pd.Series(pd.to_numeric(quarters, errors="coerce"), dtype="Int64")
+    out = pd.DataFrame(
+        {
+            "q_2": (q == 2).astype(float),
+            "q_3": (q == 3).astype(float),
+            "q_4": (q == 4).astype(float),
+        }
+    )
+    return out
+
+
+def _centered_quarter_effects(beta_q2: float, beta_q3: float, beta_q4: float) -> np.ndarray:
+    """Four log-seasonal factors that sum to zero (Q1 is the omitted dummy)."""
+    g = np.array([0.0, float(beta_q2), float(beta_q3), float(beta_q4)])
+    return g - g.mean()
+
+
+def sarimax_log_seasonal_adjust(
+    values: np.ndarray,
+    quarters: np.ndarray,
+    *,
+    min_t: int = MIN_T_SARIMAX,
+) -> tuple[np.ndarray | None, str]:
+    """Seasonally adjust a positive quarterly series with statsmodels SARIMAX.
+
+    Model (logs)::
+
+        log y_t = a + g t + γ_{q(t)} + u_t,
+        u_t ~ ARMA(p, q)
+
+    implemented as ``SARIMAX(log y, order=(p,0,q), trend='ct', exog=Q2–Q4)``.
+    ``d=0`` is required so dummy coefficients are *level* seasonal factors
+    (differencing would turn dummies into pulses). ``γ`` is recentered so
+    the four quarter effects sum to zero; the sample geometric mean of ``y``
+    is therefore (approximately) preserved.
+
+    ``(p,q)`` is chosen by AIC among a small set. Returns
+    ``(adjusted_values, note)`` or ``(None, reason)`` if the series is too
+    short or the fit fails.
+
+    Dummies use the **calendar quarter** (1–4), not the positional index, so
+    a series that starts in Q3 or has gaps still gets the right season.
+    """
+    y = np.asarray(values, dtype=float)
+    q = np.asarray(quarters, dtype=float)
+    ok = np.isfinite(y) & (y > 0) & np.isin(q, (1.0, 2.0, 3.0, 4.0))
+    if int(ok.sum()) < min_t:
+        return None, f"too few observations for SARIMAX SA (need>={min_t})"
+    if len(np.unique(q[ok])) < 4:
+        return None, "not all four quarters present; cannot identify seasonal dummies"
+    logy = np.log(y)
+    exog = _quarter_dummies(q)
+    # statsmodels wants a 1-d endogenous with possible NaN; keep full length
+    # so dummy rows align. Mark invalid points as NaN (Kalman skips them).
+    endog = np.where(ok, logy, np.nan)
+    candidates = ((1, 0, 1), (0, 0, 1), (1, 0, 0), (2, 0, 1), (0, 0, 0))
+    best = None
+    best_order = None
+    from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for p, d, q_ma in candidates:
+            try:
+                mod = SARIMAX(
+                    endog,
+                    order=(p, d, q_ma),
+                    trend="ct",
+                    exog=exog,
+                    enforce_stationarity=False,
+                    enforce_invertibility=False,
+                )
+                res = mod.fit(disp=False, maxiter=400, method="lbfgs")
+                if not np.isfinite(res.aic):
+                    continue
+                if best is None or res.aic < best.aic:
+                    best = res
+                    best_order = (p, d, q_ma)
+            except (ValueError, np.linalg.LinAlgError, RuntimeError):
+                continue
+    if best is None or best_order is None:
+        return None, "SARIMAX fit failed"
+    params = best.params
+    if not isinstance(params, pd.Series):
+        params = pd.Series(params, index=getattr(best.model, "param_names", None))
+    g = _centered_quarter_effects(
+        float(params.get("q_2", 0.0)),
+        float(params.get("q_3", 0.0)),
+        float(params.get("q_4", 0.0)),
+    )
+    seas = np.array([g[int(qi) - 1] if np.isfinite(qi) else 0.0 for qi in q])
+    log_sa = logy - seas
+    sa = np.exp(log_sa)
+    sa = np.where(ok, sa, np.nan)
+    note = (
+        f"statsmodels SARIMAX{best_order} trend=ct + quarterly dummies "
+        f"on log(gdp_per_worker); seasonal factors recentered to sum to 0; "
+        f"AIC={best.aic:.2f}"
+    )
+    return sa, note
+
+
+def seasonally_adjust_nsa_countries(
+    panel: pd.DataFrame,
+    *,
+    min_t: int = MIN_T_SARIMAX,
+) -> pd.DataFrame:
+    """Replace NSA ``gdp_per_worker`` with SARIMAX-adjusted values in place.
+
+    IMF-SA countries are left unchanged. NSA countries that cannot be
+    adjusted stay ``gdp_sa='NSA'``. Successful adjustments set
+    ``gdp_sa='SARIMAX'``, rebuild ``gdp_real_2015usd`` as
+    ``gdp_per_worker * emp_persons`` so the identity still holds, and append
+    the SARIMAX note to ``metadata``.
+    """
+    out = panel.copy()
+    if "gdp_sa" not in out.columns:
+        return out
+    notes: dict[str, str] = {}
+    for country, block in out.groupby("country", sort=False):
+        if str(block["gdp_sa"].iloc[0]) != "NSA":
+            continue
+        sa, note = sarimax_log_seasonal_adjust(
+            block["gdp_per_worker"].to_numpy(),
+            block["quarter"].to_numpy(),
+            min_t=min_t,
+        )
+        notes[str(country)] = note
+        if sa is None:
+            continue
+        idx = block.index
+        out.loc[idx, "gdp_per_worker"] = sa
+        out.loc[idx, "gdp_real_2015usd"] = (
+            out.loc[idx, "gdp_per_worker"] * out.loc[idx, "emp_persons"]
+        )
+        out.loc[idx, "gdp_sa"] = "SARIMAX"
+        out.loc[idx, "metadata"] = (
+            out.loc[idx, "metadata"].astype(str)
+            + " | seasonal adjustment: "
+            + note
+        )
+    # Record skip reasons on remaining NSA rows so the audit trail is complete.
+    still_nsa = out["gdp_sa"].astype(str) == "NSA"
+    if still_nsa.any():
+        def _skip_meta(row: pd.Series) -> str:
+            reason = notes.get(str(row["country"]), "SARIMAX SA not applied")
+            if "seasonal adjustment:" in str(row["metadata"]):
+                return str(row["metadata"])
+            return str(row["metadata"]) + " | seasonal adjustment: not applied (" + reason + ")"
+
+        out.loc[still_nsa, "metadata"] = out.loc[still_nsa].apply(_skip_meta, axis=1)
+    return out.reset_index(drop=True)
+
+
 def compose_metadata(row: pd.Series) -> str:
     """One-line audit trail of sources and transformations for the observation."""
     parts = [
@@ -959,6 +1129,7 @@ def build_panel(
     panel = panel.loc[gpw.notna() & np.isfinite(gpw.to_numpy(dtype=float)) & (gpw > 0)]
     panel["time"] = panel["year"] + (panel["quarter"] - 1.0) / 4.0
     panel["metadata"] = panel.apply(compose_metadata, axis=1)
+    panel = seasonally_adjust_nsa_countries(panel)
 
     if country_names is not None and not country_names.empty:
         names = country_names.copy()

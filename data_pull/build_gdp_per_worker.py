@@ -65,8 +65,10 @@ def main(argv: list[str] | None = None) -> int:
     n_c = int(panel["country"].nunique())
     n_obs = len(panel)
     t0, t1 = panel["period"].min(), panel["period"].max()
-    sa_c = int(panel.groupby("country")["gdp_sa"].first().eq("SA").sum())
-    nsa_c = n_c - sa_c
+    sa_flag = panel.groupby("country")["gdp_sa"].first()
+    sa_c = int((sa_flag == "SA").sum())
+    sarimax_c = int((sa_flag == "SARIMAX").sum())
+    nsa_c = int((sa_flag == "NSA").sum())
     emp_kind = (
         panel.groupby("country")["emp_source"]
         .first()
@@ -78,7 +80,8 @@ def main(argv: list[str] | None = None) -> int:
         f"real GDP per worker, annualized, {panel_path.name}\n"
         f"units: constant 2015 USD at 2015 market FX (not PPP)\n"
         f"countries={n_c}  obs={n_obs}  {t0}–{t1}\n"
-        f"GDP seasonal adjustment (country-level): SA={sa_c}  NSA={nsa_c}\n"
+        f"GDP seasonal adjustment (country-level): "
+        f"SA={sa_c}  SARIMAX={sarimax_c}  NSA={nsa_c}\n"
         f"employment source (country-level, first token):\n{emp_kind}\n"
         f"wrote {panel_path}\n"
         f"wrote {cov_path}\n"

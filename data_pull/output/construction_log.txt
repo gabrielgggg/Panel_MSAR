@@ -1,7 +1,7 @@
 real GDP per worker, annualized, gdp_per_worker_q.csv
 units: constant 2015 USD at 2015 market FX (not PPP)
 countries=101  obs=7450  1950-Q1–2026-Q2
-GDP seasonal adjustment (country-level): SA=68  NSA=33
+GDP seasonal adjustment (country-level): SA=68  SARIMAX=27  NSA=6
 employment source (country-level, first token):
 emp_source
 ILOSTAT EMP_TEMP_SEX_AGE_NB quarterly (official)    86

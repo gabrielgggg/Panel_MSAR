@@ -102,10 +102,32 @@ IMF QNEA publishes both `SA` and `NSA`.
 
 * If a country has **any** SA constant-price GDP, **all** of that country’s
   GDP observations come from SA (NSA is ignored for that country).
-* Otherwise the country is filled from NSA.
+* Otherwise the country is filled from NSA **GDP**, and `gdp_per_worker`
+  is then seasonally adjusted with statsmodels `SARIMAX` (see below).
 
-SA and NSA are never spliced inside one country. The choice is stored in
-`gdp_sa` and in `metadata`.
+IMF SA and NSA GDP are never spliced inside one country. `gdp_sa` is `SA`
+(IMF), `SARIMAX` (NSA GDP, then SARIMAX-adjusted), or `NSA` (too short to
+adjust).
+
+### SARIMAX adjustment of NSA countries
+
+NSA GDP (and typically NSA employment) leaves seasonality in
+`gdp_per_worker`. For those countries, if there are at least 12 observations
+covering all four calendar quarters, we fit
+
+```
+log(gdp_per_worker)_t = a + g t + γ_{q(t)} + u_t,
+u_t ~ ARMA(p,q)     # SARIMAX, d=0, trend=ct, exog = Q2–Q4 dummies
+```
+
+`(p,q)` is chosen by AIC among a small set. Dummy coefficients are *level*
+seasonal factors (`d=0` is required: differencing would turn dummies into
+pulses). The four `γ`s are recentered to sum to zero so the geometric mean
+is preserved. Dummies use the **calendar quarter**, not the row position.
+
+`gdp_real_2015usd` is rebuilt as `gdp_per_worker * emp_persons` after
+adjustment. Spells shorter than 12 quarters, or missing a calendar quarter,
+stay `NSA` and the metadata records why.
 
 ### Power-of-ten unit breaks in QNEA
 

@@ -232,17 +232,41 @@ ILO time labels are \texttt{YYYYQn} (no hyphen). IMF labels are
 
 \section{Seasonal adjustment of GDP}
 
-QNEA publishes both \texttt{SA} and \texttt{NSA}. The choice is made
-\emph{at the country level}, never spliced inside a country:
+QNEA publishes both \texttt{SA} and \texttt{NSA}. IMF SA and NSA GDP are
+never spliced inside a country:
 
 \begin{itemize}
 \item If a country has any SA constant-price GDP, all of that country's GDP
-observations come from SA (NSA is ignored for that country).
-\item Otherwise the country is filled from NSA.
+observations come from SA.
+\item Otherwise GDP is NSA. Productivity is then seasonally adjusted with
+statsmodels SARIMAX when the spell is long enough.
 \end{itemize}
 
-The current vintage uses SA for 68 countries and NSA for 33. The choice is
-stored in \texttt{gdp\_sa} and in \texttt{metadata}.
+\paragraph{SARIMAX on NSA countries.}
+NSA GDP, and typically NSA employment, leave seasonality in the productivity
+ratio. For those countries, if there are at least 12 observations covering
+all four calendar quarters, we fit
+\begin{equation}
+\log(\text{gdp per worker})_{t}
+=
+a + g t + \gamma_{q(t)} + u_{t},
+\qquad
+u_{t}\sim\mathrm{ARMA}(p,q),
+\end{equation}
+as \texttt{SARIMAX(log $y$, order=$(p,0,q)$, trend=ct, exog=Q2--Q4 dummies)}.
+$(p,q)$ is chosen by AIC. \texttt{d=0} so dummy coefficients are
+\emph{level} seasonal factors (differencing would turn dummies into pulses).
+The four $\gamma$s are recentered to sum to zero. Dummies use the calendar
+quarter, not the row position. After adjustment,
+\texttt{gdp\_real\_2015usd} is rebuilt as
+\texttt{gdp\_per\_worker $\times$ emp\_persons}, and \texttt{gdp\_sa} is set
+to \texttt{SARIMAX}.
+
+Spells shorter than 12 quarters, or missing a calendar quarter, stay
+\texttt{NSA}. In the current vintage that is Ghana (11), El Salvador (10),
+Belarus (6), Bangladesh (4), Botswana (2), and Mozambique (2).
+
+The current vintage: 68 IMF-SA, 27 SARIMAX, 6 remaining NSA.
 
 \section{Exchange rates, including the euro}
 
@@ -438,7 +462,7 @@ and dropping of IMF staff projections.
 Countries & 101 \\
 Observations & 7{,}450 \\
 Span & 1950Q1--2026Q2 (unbalanced) \\
-GDP SA / NSA (country-level) & 68 / 33 \\
+GDP SA / SARIMAX / NSA (country-level) & 68 / 27 / 6 \\
 Employment: official quarterly / interpolated annual & 86 / 15 \\
 United States, 2015 mean GDP per worker & $\$122{,}925$ \\
 Germany, 2015 mean GDP per worker & $\$85{,}222$ \\
