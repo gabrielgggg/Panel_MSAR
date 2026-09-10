@@ -174,7 +174,7 @@ def fit_spec(df, spec, verbose=True):
         df["country"],
         df["time"],
         df["y"],
-        n_starts=8,
+        n_starts=4,
         maxiter=400,
         seed=1,
         compute_se=True,
@@ -186,7 +186,7 @@ def fit_spec(df, spec, verbose=True):
         f"Pulled log real GDP per worker from 1970Q1\n"
         f"source={CSV.as_posix()}\n{spec['title']}\n"
         f"random_intercepts={spec['random_intercepts']}  "
-        f"rho_max=0.995  compute_se=True\n\n"
+        f"n_starts=4  rho_max=0.995  compute_se=True\n\n"
     )
     txt.write_text(header + res.summary() + "\n", encoding="utf-8")
     print(res, flush=True)

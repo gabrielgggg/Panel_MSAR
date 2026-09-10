@@ -23,8 +23,8 @@ The outcome is log real GDP per worker from the pulled quarterly panel (constant
 Standard errors (in parentheses) are delta-method from a numerical Hessian on shared parameters. $\pi$ is the ergodic distribution of $\Pi$. $E[z]$ is the long-run mean of the cycle implied by $\mu$, $\rho$, and $\Pi$.
 \clearpage
 \section{Common intercept and linear trend}
-Pulled panel from 1970Q1: log real GDP per worker. 101 countries, 7354 observations, 1970-Q1--2026-Q2. Fitted countries: 92. Observations: 6787. Log-likelihood: 14863.42. Ergodic mean of the cycle $E[z]=-0.0985$ (0.1273).
-Common intercept $a=10.4145$ (0.1330). Common slope $g=0.0037$ (0.0010).
+Pulled panel from 1970Q1: log real GDP per worker. 101 countries, 7354 observations, 1970-Q1--2026-Q2. Fitted countries: 92. Observations: 6787. Log-likelihood: 15566.07. Ergodic mean of the cycle $E[z]=-0.1219$ (0.0650).
+Common intercept $a=10.9411$ (0.0836). Common slope $g=0.0021$ (0.0009).
 \begin{table}[h]
 \centering
 \caption{Regime AR(1), transition matrix, and ergodic $\pi$. Columns are regimes.}
@@ -32,20 +32,20 @@ Common intercept $a=10.4145$ (0.1330). Common slope $g=0.0037$ (0.0010).
 \toprule
  & (0) & (1) & (2) \\
 \midrule
-$\mu$ & -1.2653 & 0.0000 & 0.8509 \\
- & (0.1601) & --- & (0.0994) \\ \addlinespace
-$\sigma$ & 0.1217 & 0.0272 & 0.0111 \\
- & (0.0032) & (0.0006) & (0.0002) \\ \addlinespace
-$\rho$ & 0.9905 & 0.9950 & 0.9950 \\
- & (0.0020) & (0.0000) & (0.0000) \\ \addlinespace
-$\Pi_{0\cdot}$ & 0.9328 & 0.0570 & 0.0102 \\
- & (0.0095) & (0.0092) & (0.0042) \\ \addlinespace
-$\Pi_{1\cdot}$ & 0.0175 & 0.9591 & 0.0234 \\
- & (0.0034) & (0.0048) & (0.0041) \\ \addlinespace
-$\Pi_{2\cdot}$ & 0.0147 & 0.0157 & 0.9697 \\
- & (0.0032) & (0.0040) & (0.0037) \\ \addlinespace
-$\pi$ & 0.1937 & 0.4187 & 0.3876 \\
- & (0.0227) & (0.0305) & (0.0330) \\ \addlinespace
+$\mu$ & -1.5918 & 0.0000 & 0.3677 \\
+ & (0.1302) & --- & (0.0965) \\ \addlinespace
+$\sigma$ & 0.0809 & 0.0249 & 0.0108 \\
+ & (0.0023) & (0.0005) & (0.0002) \\ \addlinespace
+$\rho$ & 0.9950 & 0.9950 & 0.9950 \\
+ & (0.0000) & (0.0000) & (0.0000) \\ \addlinespace
+$\Pi_{0\cdot}$ & 0.8849 & 0.0923 & 0.0228 \\
+ & (0.0153) & (0.0142) & (0.0063) \\ \addlinespace
+$\Pi_{1\cdot}$ & 0.0201 & 0.9603 & 0.0196 \\
+ & (0.0042) & (0.0047) & (0.0037) \\ \addlinespace
+$\Pi_{2\cdot}$ & 0.0270 & 0.0038 & 0.9692 \\
+ & (0.0040) & (0.0034) & (0.0037) \\ \addlinespace
+$\pi$ & 0.1690 & 0.4305 & 0.4004 \\
+ & (0.0180) & (0.0321) & (0.0337) \\ \addlinespace
 \bottomrule
 \end{tabular}
 \end{table}
@@ -56,8 +56,8 @@ $\pi$ & 0.1937 & 0.4187 & 0.3876 \\
 \end{figure}
 \clearpage
 \section{Random-effects intercepts, common linear trend}
-Pulled panel from 1970Q1: log real GDP per worker. 101 countries, 7354 observations, 1970-Q1--2026-Q2. Fitted countries: 92. Observations: 6787. Log-likelihood: 15090.50. Ergodic mean of the cycle $E[z]=-0.1636$ (0.1083).
-Random intercepts $a_i\sim N(\alpha,\omega^2)$ with $\alpha=9.8429$ (0.0823), $\omega=0.7204$ (0.0238). Posterior-mean $a_i$: mean 9.845, min 7.996, max 11.684. Common slope $g=0.0084$ (0.0008).
+Pulled panel from 1970Q1: log real GDP per worker. 101 countries, 7354 observations, 1970-Q1--2026-Q2. Fitted countries: 92. Observations: 6787. Log-likelihood: 15796.09. Ergodic mean of the cycle $E[z]=0.0875$.
+Random intercepts $a_i\sim N(\alpha,\omega^2)$ with $\alpha=9.8328$ (0.0725), $\omega=0.7115$ (0.0206). Posterior-mean $a_i$: mean 9.848, min 8.040, max 11.802. Common slope $g=0.0086$ (0.0008).
 \begin{table}[h]
 \centering
 \caption{Regime AR(1), transition matrix, and ergodic $\pi$. Columns are regimes.}
@@ -65,20 +65,20 @@ Random intercepts $a_i\sim N(\alpha,\omega^2)$ with $\alpha=9.8429$ (0.0823), $\
 \toprule
  & (0) & (1) & (2) \\
 \midrule
-$\mu$ & -0.8152 & 0.0000 & 0.5277 \\
- & (0.1955) & --- & (0.0827) \\ \addlinespace
-$\sigma$ & 0.1244 & 0.0271 & 0.0109 \\
- & (0.0032) & (0.0006) & (0.0002) \\ \addlinespace
-$\rho$ & 0.9804 & 0.9950 & 0.9950 \\
- & (0.0081) & (0.0002) & (0.0000) \\ \addlinespace
-$\Pi_{0\cdot}$ & 0.9351 & 0.0490 & 0.0159 \\
- & (0.0096) & (0.0089) & (0.0051) \\ \addlinespace
-$\Pi_{1\cdot}$ & 0.0123 & 0.9700 & 0.0177 \\
- & (0.0027) & (0.0041) & (0.0033) \\ \addlinespace
-$\Pi_{2\cdot}$ & 0.0125 & 0.0126 & 0.9749 \\
- & (0.0028) & (0.0033) & (0.0033) \\ \addlinespace
-$\pi$ & 0.1605 & 0.4323 & 0.4071 \\
- & (0.0209) & (0.0329) & (0.0339) \\ \addlinespace
+$\mu$ & -0.9859 & 0.0000 & 0.5375 \\
+ & (0.2396) & --- & (0.0700) \\ \addlinespace
+$\sigma$ & 0.0877 & 0.0254 & 0.0108 \\
+ & (0.0029) & (0.0005) & (0.0002) \\ \addlinespace
+$\rho$ & 0.9946 & 0.9950 & 0.9950 \\
+ &  & (0.0002) &  \\ \addlinespace
+$\Pi_{0\cdot}$ & 0.8772 & 0.0969 & 0.0259 \\
+ & (0.0168) & (0.0157) & (0.0075) \\ \addlinespace
+$\Pi_{1\cdot}$ & 0.0158 & 0.9693 & 0.0150 \\
+ & (0.0033) & (0.0041) & (0.0030) \\ \addlinespace
+$\Pi_{2\cdot}$ & 0.0186 & 0.0068 & 0.9746 \\
+ & (0.0031) & (0.0028) & (0.0032) \\ \addlinespace
+$\pi$ & 0.1220 & 0.4742 & 0.4038 \\
+ & (0.0155) & (0.0337) & (0.0344) \\ \addlinespace
 \bottomrule
 \end{tabular}
 \end{table}
