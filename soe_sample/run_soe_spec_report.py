@@ -197,6 +197,9 @@ def _tabular(res):
     for i in range(k):
         se_row = se_P[i] if se_P is not None else None
         rows.extend(_pair_rows(rf"$\Pi_{{{i}\cdot}}$", P[i], se_row, k))
+    if "pi" in pr:
+        se_pi = np.atleast_1d(se["pi"]) if se is not None and se.get("pi") is not None else None
+        rows.extend(_pair_rows(r"$\pi$", _as1d(pr["pi"], k), se_pi, k))
 
     header = " & ".join([""] + [rf"({s})" for s in range(k)]) + r" \\"
     body = []
@@ -227,7 +230,23 @@ def _trend_note(res):
         )
         return " ".join(bits)
     a, g = pr.get("a"), pr.get("g")
-    if res.country_intercepts and isinstance(a, dict):
+    if getattr(res, "random_intercepts", False):
+        al, om = pr.get("alpha"), pr.get("omega")
+        sa = se.get("alpha")
+        so = se.get("omega")
+        extra_a = f" ({float(sa):.4f})" if sa is not None and np.isfinite(float(sa)) else ""
+        extra_o = f" ({float(so):.4f})" if so is not None and np.isfinite(float(so)) else ""
+        bits.append(
+            rf"Random intercepts $a_i\sim N(\alpha,\omega^2)$ with "
+            rf"$\alpha={float(al):.4f}${extra_a}, $\omega={float(om):.4f}${extra_o}."
+        )
+        if isinstance(a, dict):
+            aa = np.array(list(a.values()), dtype=float)
+            bits.append(
+                rf"Posterior-mean $a_i$: mean {aa.mean():.3f}, "
+                rf"min {aa.min():.3f}, max {aa.max():.3f}."
+            )
+    elif res.country_intercepts and isinstance(a, dict):
         aa = np.array(list(a.values()), dtype=float)
         bits.append(
             rf"Country intercepts $a_i$: mean {aa.mean():.3f}, "

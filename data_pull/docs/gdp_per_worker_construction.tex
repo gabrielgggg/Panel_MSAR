@@ -1,0 +1,488 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,longtable,setspace,caption,hyperref,array}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{mathpazo}
+\usepackage{xurl}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\captionsetup{font=small,skip=6pt}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=blue
+}
+
+\title{Construction of a Quarterly Panel of Real GDP per Worker\\
+in Constant 2015 USD at Market Exchange Rates}
+\author{}
+\date{10 September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+This note documents the construction of an unbalanced country--quarter panel of
+\textbf{real GDP per worker} (employed persons, not population). The series is
+expressed in a common international unit: constant 2015 US dollars at 2015
+period-average market exchange rates. It is not PPP. Exchange rates enter
+\textbf{once}, in the base year, so the time path of each country is the path of
+real GDP in local currency and is not contaminated by quarterly bilateral-dollar
+volatility. Employment is official ILOSTAT quarterly data where available, and
+linearly interpolated official annual data otherwise. The current vintage has
+101 countries and 7{,}450 quarterly observations, 1950Q1--2026Q2. The panel,
+raw extracts, and code live entirely in this folder; no series from
+elsewhere in the repository are used.
+\end{abstract}
+
+\tableofcontents
+\clearpage
+
+\section{Purpose and target series}
+
+The object of interest is labour productivity at quarterly frequency, for as
+many economies as national accounts and labour-force data will support:
+
+\begin{quote}
+annualized real GDP per \emph{employed person}, in constant 2015 USD at 2015
+market exchange rates.
+\end{quote}
+
+Three design constraints follow from that sentence.
+
+\begin{enumerate}
+\item \textbf{Per worker, not per capita.} The denominator is employment
+(persons), not mid-year population. Using population would mix participation,
+demography, and productivity.
+\item \textbf{Common units, not PPP.} Levels must be comparable across
+countries in the same dollar vintage. Purchasing-power parities are not used.
+The converter is the 2015 period-average market exchange rate (domestic
+currency per USD).
+\item \textbf{No quarterly FX in the volume path.} Converting each quarter with
+that quarter's exchange rate would put dollar--local-currency swings into
+measured productivity. Real GDP is therefore taken in local currency at
+constant prices, turned into a 2015 volume index, scaled by 2015 current-price
+GDP, and divided by the \emph{2015} average exchange rate only.
+\end{enumerate}
+
+The delivered file is
+\texttt{output/gdp\_per\_worker\_q.csv}.
+Required columns are \texttt{country} (ISO 3166-1 alpha-3), \texttt{period}
+(\texttt{YYYY-Qn}), \texttt{gdp\_per\_worker}, and \texttt{metadata}. Additional
+columns are audit extras (country name, year, quarter, calendar time,
+annualized real GDP in 2015 USD, employment in persons, SA/NSA flag, employment
+source).
+
+\section{Construction formula}
+
+For country $i$ and quarter $t$,
+\begin{equation}
+\label{eq:usd}
+Y^{\mathrm{USD}}_{i,t}
+=
+\left(\frac{Y^{r,q}_{i,t}\times 4}{Y^{r,A}_{i,2015}}\right)
+\times
+\left(\frac{Y^{n,A}_{i,2015}}{E_{i,2015}}\right),
+\qquad
+\text{gdp per worker}_{i,t}
+=
+\frac{Y^{\mathrm{USD}}_{i,t}}{L_{i,t}}.
+\end{equation}
+
+\begin{table}[h]
+\centering
+\caption{Symbols in~\eqref{eq:usd}.}
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.18\textwidth}
+                >{\raggedright\arraybackslash}p{0.46\textwidth}
+                >{\raggedright\arraybackslash}p{0.28\textwidth}}
+\toprule
+Symbol & Meaning & Source \\
+\midrule
+$Y^{r,q}_{i,t}$ &
+Real GDP, domestic currency, \textbf{quarterly flow} (not SAAR) &
+IMF QNEA \texttt{B1GQ}, constant prices, \texttt{XDC} \\
+$Y^{r,A}_{i,2015}$ &
+Real GDP, domestic currency, 2015 annual &
+IMF ANEA \texttt{B1GQ} constant \texttt{XDC};
+fallback $=$ sum of four 2015 QNEA quarters \\
+$Y^{n,A}_{i,2015}$ &
+Current-price GDP, domestic currency, 2015 annual &
+IMF ANEA \texttt{B1GQ} current \texttt{XDC} \\
+$E_{i,2015}$ &
+2015 period-average domestic currency per USD &
+IMF ER \texttt{XDC\_USD} / \texttt{PA\_RT} / annual \\
+$L_{i,t}$ &
+Employed persons &
+ILOSTAT (Section~\ref{sec:emp}) \\
+$\times 4$ &
+Quarterly flow $\to$ annualized flow &
+Unit conversion, not seasonal adjustment \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Why 2015.}
+Chain-linked national-accounts volumes have a country-specific reference year
+(the US QNEA extract is referenced to 2017). Dividing each quarter by that
+country's 2015 real annual total puts every country on a $2015=1$ volume index.
+Multiplying by 2015 current-price GDP converts the index back into 2015-price
+local currency. Dividing by the 2015 average FX then puts every country in the
+same international unit.
+
+\paragraph{Why multiply by 4.}
+IMF QNEA constant-price GDP is a quarterly \emph{flow}, not a seasonally
+adjusted annual rate. For the United States, 2015Q1 is about
+$4.67\times 10^{12}$; the four 2015 quarters \emph{sum} to the ANEA 2015 annual
+total ($\approx 18.80\times 10^{12}$). Annualizing by 4 makes GDP/employment
+``output per worker per year.''
+
+\paragraph{Identities (tested).}
+If the four 2015 real quarters sum to the 2015 annual real total, then 2015
+annualized $Y^{\mathrm{USD}}$ equals 2015 current-price GDP divided by
+$E_{i,2015}$. Doubling real LCU doubles $Y^{\mathrm{USD}}$. Doubling the
+base-year FX halves $Y^{\mathrm{USD}}$. The shipped rebase function has no
+quarterly-FX argument.
+
+\paragraph{United States, 2015.}
+ANEA 2015 current-price GDP is $\$18.295$ trillion; $E_{\mathrm{US},2015}=1$.
+ILO official quarterly employment is about 147--150 million persons. The
+constructed series is therefore about $\$122{,}500$--$123{,}500$ per worker in
+each 2015 quarter, which is the annualized identity above.
+
+\section{Sources and exact extracts}
+\label{sec:sources}
+
+Extracts are cached under \texttt{raw/} by \texttt{download\_sources.py}.
+Re-run with \texttt{--force} to refresh. All IMF queries use SDMX~3.0,
+\texttt{Accept: text/csv}. The wildcard \texttt{*} is all countries.
+
+\subsection{IMF National Economic Accounts}
+
+\paragraph{Quarterly (QNEA).}
+Dataset: \url{https://data.imf.org/en/datasets/IMF.STA:QNEA}.
+Key order:
+\path{COUNTRY.INDICATOR.PRICE_TYPE.S_ADJUSTMENT.TYPE_OF_TRANSFORMATION.FREQUENCY}.
+Indicator \texttt{B1GQ} is GDP. \texttt{Q} in the price slot is constant
+prices; \texttt{XDC} is domestic currency; the last \texttt{Q} is quarterly
+frequency.
+
+\begin{itemize}
+\item SA volumes:
+\url{https://api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA/QNEA/~/*.B1GQ.Q.SA.XDC.Q}
+\item NSA volumes:
+\url{https://api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA/QNEA/~/*.B1GQ.Q.NSA.XDC.Q}
+\end{itemize}
+
+\paragraph{Annual (ANEA).}
+Dataset: \url{https://data.imf.org/en/datasets/IMF.STA:ANEA}.
+Key order:
+\path{COUNTRY.INDICATOR.PRICE_TYPE.TYPE_OF_TRANSFORMATION.FREQUENCY}.
+
+\begin{itemize}
+\item Constant-price GDP, LCU, annual:
+\url{https://api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA/ANEA/~/*.B1GQ.Q.XDC.A}
+\item Current-price GDP, LCU, annual:
+\url{https://api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA/ANEA/~/*.B1GQ.V.XDC.A}
+\end{itemize}
+
+IMF \texttt{SCALE} is a power-of-ten unit multiplier
+($v\times 10^{\mathrm{SCALE}}$). The GDP extracts used here have
+\texttt{SCALE}=0 (units of 1 domestic-currency unit). Missing scale is treated
+as 0. Staff projections and imputations
+(\texttt{DERIVATION\_TYPE} in $\{\texttt{SP},\texttt{SE},\texttt{SEME},\texttt{SEHI}\}$)
+are dropped.
+
+ANEA \texttt{TIME\_PERIOD} arrives as float (\texttt{2015.0}) when pandas reads
+the CSV. The parser accepts \texttt{2015}, \texttt{2015.0}, and integer 2015,
+and rejects \texttt{nan}.
+
+\subsection{IMF Exchange Rates}
+
+Dataset: \url{https://data.imf.org/en/datasets/IMF.STA:ER}.
+Key order:
+\path{COUNTRY.INDICATOR.TYPE_OF_TRANSFORMATION.FREQUENCY}.
+\texttt{XDC\_USD} is domestic currency per US dollar; \texttt{PA\_RT} is period
+average; frequency is annual.
+
+\url{https://api.imf.org/external/sdmx/3.0/data/dataflow/IMF.STA/ER/~/*.XDC_USD.PA_RT.A}
+
+Country names come from IMF codelist \texttt{CL\_COUNTRY}:
+\url{https://api.imf.org/external/sdmx/3.0/structure/codelist/IMF/CL_COUNTRY}.
+
+\subsection{ILOSTAT employment}
+
+Bulk CSVs via the ILO Rplumber indicator service
+(\url{https://ilostat.ilo.org/data/}):
+
+\begin{itemize}
+\item Official, quarterly:
+\url{https://rplumber.ilo.org/data/indicator/?id=EMP_TEMP_SEX_AGE_NB_Q}
+\item Official, annual:
+\url{https://rplumber.ilo.org/data/indicator/?id=EMP_TEMP_SEX_AGE_NB_A}
+\item ILO modelled estimates, annual (downloaded as a last-resort source; not
+used in the current vintage, because every panel country had official data):
+\url{https://rplumber.ilo.org/data/indicator/?id=EMP_2EMP_SEX_AGE_NB_A}
+\end{itemize}
+
+ILO time labels are \texttt{YYYYQn} (no hyphen). IMF labels are
+\texttt{YYYY-Qn}. Both parse to the same year and quarter.
+
+\section{Seasonal adjustment of GDP}
+
+QNEA publishes both \texttt{SA} and \texttt{NSA}. The choice is made
+\emph{at the country level}, never spliced inside a country:
+
+\begin{itemize}
+\item If a country has any SA constant-price GDP, all of that country's GDP
+observations come from SA (NSA is ignored for that country).
+\item Otherwise the country is filled from NSA.
+\end{itemize}
+
+The current vintage uses SA for 68 countries and NSA for 33. The choice is
+stored in \texttt{gdp\_sa} and in \texttt{metadata}.
+
+\section{Exchange rates, including the euro}
+
+$E_{i,2015}$ is the 2015 annual average of domestic currency per USD. For the
+United States the value is 1. For the United Kingdom it is the 2015 average
+pound per dollar.
+
+Euro-area members as of 1~January~2015---Austria, Belgium, Cyprus, Germany,
+Spain, Estonia, Finland, France, Greece, Ireland, Italy, Lithuania,
+Luxembourg, Latvia, Malta, the Netherlands, Portugal, Slovakia,
+Slovenia---have national \texttt{XDC\_USD} series that \emph{stop at euro
+adoption} (Germany: 1998). After adoption the domestic currency is the euro.
+Those countries, and euro users without a 2015 national series (Andorra,
+Kosovo, Montenegro, San Marino, Vatican), inherit the 2015 Euro Area
+aggregate rate, IMF country code \textbf{\texttt{G163}}
+($\approx 0.901$ EUR per USD in 2015).
+
+That inherited rate is still a single 2015 converter. Croatia is not in the
+set: in 2015 it used the kuna, so its own 2015 \texttt{XDC\_USD} series is the
+correct converter. \texttt{G163} is an FX donor only; it is never a panel
+country.
+
+\section{Employment}
+\label{sec:emp}
+
+The denominator is employed persons, both sexes. ILO \texttt{EMP\_*\_NB}
+values are thousands of persons and are multiplied by 1{,}000.
+
+\subsection{Filters}
+
+Applied to every ILO extract:
+
+\begin{itemize}
+\item \texttt{sex = SEX\_T} (both sexes). Male/female breakdowns are discarded.
+\item Age preference, one definition per country, never mixed:
+\begin{enumerate}
+\item \texttt{AGE\_YTHADULT\_YGE15} (15+)
+\item \texttt{AGE\_AGGREGATE\_YGE15}
+\item \texttt{AGE\_AGGREGATE\_TOTAL}
+\item \texttt{AGE\_YTHADULT\_Y15-64}
+\end{enumerate}
+\item One ILO \texttt{source} code per country (the longest series), so LFS
+vintages are not spliced.
+\end{itemize}
+
+\subsection{Source hierarchy (country-level)}
+
+\begin{enumerate}
+\item Official \textbf{quarterly} \texttt{EMP\_TEMP\_SEX\_AGE\_NB\_Q}, if the
+country has at least eight quarterly observations after filters.
+\item Otherwise official \textbf{annual} \texttt{EMP\_TEMP\_SEX\_AGE\_NB\_A},
+linearly interpolated to quarter midpoints.
+\item Otherwise ILO modelled annual \texttt{EMP\_2EMP\_SEX\_AGE\_NB\_A},
+interpolated the same way.
+\end{enumerate}
+
+Sources are not spliced quarter-by-quarter inside a country, except for the
+narrow $4\times$ patch in Section~\ref{sec:quality}. In the current vintage,
+86 countries use official quarterly employment and 15 use interpolated
+official annual. No country falls through to modelled estimates.
+
+\subsection{Annual to quarterly interpolation}
+
+The annual figure for year $y$ is treated as the annual \emph{average} stock,
+located at mid-year $t=y+0.5$. Quarter $q$ of year $y$ is located at
+\begin{equation}
+t = y + (q-0.5)/4
+\qquad\text{(Q1: }y+0.125,\;\ldots,\;\text{Q4: }y+0.875\text{)}.
+\end{equation}
+Between adjacent annual observations the interpolant is the unique straight
+line in $t$. Quarters whose midpoint lies outside
+$[t_{\mathrm{first}},t_{\mathrm{last}}]$ are dropped (no extrapolation).
+
+This is interpolation of a stock, not Denton benchmarking. The four-quarter
+average equals the annual level only if employment is linear in calendar
+time. That limitation is accepted in exchange for a transparent, testable
+rule.
+
+\section{Data-quality repairs}
+\label{sec:quality}
+
+Raw QNEA and ILO extracts contain a small number of unit and survey breaks
+that would otherwise dominate the productivity series. The repairs below are
+implemented in \texttt{construct.py} and covered by specification tests.
+
+\subsection{Power-of-ten unit breaks in QNEA}
+
+Some QNEA LCU series change unit (1 $\to$ thousands $\to$ millions) without a
+matching \texttt{SCALE}. Jamaica in 2018 is a million-fold drop in the raw
+extract while ANEA annual real GDP does not drop.
+
+For each country-year compare $4\times\mathrm{mean(quarterly\ LCU)}$ to ANEA
+annual real LCU. If they differ by $10^{k}$ with $|k|\ge 3$, that year's
+quarterly LCU is multiplied by $10^{-k}$. A SAAR-versus-flow gap of 4
+($\log_{10}4\approx 0.6$) is ignored. Years without ANEA inherit the
+neighbouring year's factor. The factor is recorded in \texttt{metadata} when
+it is not 1.
+
+\subsection{Years that still disagree with ANEA}
+
+After that rescale, country-years whose $4\times\mathrm{mean(quarterly)}$
+still differs from ANEA annual real by more than a factor of 5 are
+\textbf{dropped}. Residual breaks cannot be repaired with a power of ten
+without putting FX back into the volume path.
+
+\subsection{Spells that do not contain the rebase year}
+
+A remaining adjacent-quarter real-GDP move larger than a factor of 20 is
+treated as a unit or currency restatement (El Salvador's colon/USD overlap
+around dollarization). Only the contiguous spell that contains 2015 is kept,
+so the volume index is never a ratio of two different currency units. El
+Salvador in the panel therefore starts in 2005Q1 rather than 2000Q1.
+
+\subsection{ILO quarterly employment off the annual path}
+
+Official quarterly employment is occasionally a factor of about four too
+small for a calendar year. Israel 2017 is the textbook case: about 0.94
+million persons in the quarterly extract against about 3.7 million on the
+annual path.
+
+Where an official annual series exists, a quarter whose employment divided
+by the interpolated annual path lies outside $[0.4,\,2.5]$ is replaced by
+that interpolant and the source string is annotated. Israel 2017 in the
+panel is about 3.81 million persons, in line with 2016 and 2018.
+
+\section{Sample and join}
+
+Keep ISO 3166-1 alpha-3 codes (and Kosovo \texttt{KOS} if present). Drop IMF
+aggregates. The panel is the \textbf{inner join} of constructed GDP and
+employment on $(\mathrm{country},\mathrm{period})$. Duplicate
+country--period rows are rejected. Non-positive GDP or employment is
+dropped.
+
+The binding constraint is IMF quarterly real GDP, not employment. QNEA
+constant-price LCU exists for roughly a hundred economies; the inner join
+with 2015 annual levels, 2015 FX, and ILO employment yields 101 countries.
+
+\section{Output schema and metadata}
+
+\begin{table}[h]
+\centering
+\caption{Columns in \texttt{output/gdp\_per\_worker\_q.csv}.}
+\begin{tabular}{lll}
+\toprule
+Column & Required? & Content \\
+\midrule
+\texttt{country} & yes & ISO3 \\
+\texttt{period} & yes & \texttt{YYYY-Qn} \\
+\texttt{gdp\_per\_worker} & yes & annualized 2015 USD per employed person \\
+\texttt{metadata} & yes & sources and transformations for the observation \\
+\texttt{country\_name} & no & IMF \texttt{CL\_COUNTRY} label \\
+\texttt{year}, \texttt{quarter}, \texttt{time} & no & calendar parts; \texttt{time}$=y+(q-1)/4$ \\
+\texttt{gdp\_real\_2015usd} & no & annualized real GDP, 2015 USD \\
+\texttt{emp\_persons} & no & employed persons \\
+\texttt{gdp\_sa} & no & \texttt{SA} or \texttt{NSA} \\
+\texttt{emp\_source} & no & ILO series and any interpolation/patch note \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Each observation's \texttt{metadata} records, in order: the QNEA series and
+SA/NSA flag and the $\times 4$ annualization (plus any power-of-ten rescale);
+the 2015 real and nominal level sources; the 2015 FX source (including
+\texttt{G163} when used); the ILO series, source code, sex, age, and
+thousands-to-persons conversion; and that the ratio is 2015 USD market FX,
+not PPP.
+
+\section{Replication}
+
+From this folder:
+\begin{verbatim}
+python download_sources.py
+python build_gdp_per_worker.py
+python -m unittest tests.test_construct
+\end{verbatim}
+
+\texttt{construct.build\_panel(...)} is the construction entry point. The CLI
+only reads the cached CSVs into that function. Tests call the shipped
+functions (including \texttt{build\_panel}) and check documented identities:
+the 2015 USD level, one-for-one pass-through of real LCU growth, euro FX fill
+from \texttt{G163}, SA-not-mixed-with-NSA, mid-year interpolation geometry,
+no extrapolation, power-of-ten unit alignment, $4\times$ employment patches,
+and dropping of IMF staff projections.
+
+\section{Current vintage}
+
+\begin{table}[h]
+\centering
+\caption{Headline counts, vintage of the \texttt{raw/} extracts dated
+10 September 2026.}
+\begin{tabular}{lr}
+\toprule
+Countries & 101 \\
+Observations & 7{,}450 \\
+Span & 1950Q1--2026Q2 (unbalanced) \\
+GDP SA / NSA (country-level) & 68 / 33 \\
+Employment: official quarterly / interpolated annual & 86 / 15 \\
+United States, 2015 mean GDP per worker & $\$122{,}925$ \\
+Germany, 2015 mean GDP per worker & $\$85{,}222$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Coverage by country is Table~\ref{tab:coverage}. Longest samples include the
+United States (1950Q1--2026Q2, $N=306$), Korea ($N=242$), Canada ($N=202$),
+and Australia ($N=192$). Several low-income economies appear with short
+spells (Bangladesh 2024 only; Botswana and Mozambique two quarters). Those
+short spells are retained: the product is an unbalanced panel, and the
+estimator that consumes it already drops countries below a minimum $T$.
+
+\section{Code map}
+
+\begin{tabular}{ll}
+\toprule
+File & Role \\
+\midrule
+\texttt{download\_sources.py} & URLs, streaming download, \texttt{raw/} cache \\
+\texttt{construct.py} & Every transformation listed above \\
+\texttt{build\_gdp\_per\_worker.py} & CLI: download if needed $\to$ build $\to$ \texttt{output/} \\
+\texttt{tests/test\_construct.py} & Specification tests against shipped functions \\
+\texttt{docs/gdp\_per\_worker\_construction.tex} & This note \\
+\bottomrule
+\end{tabular}
+
+\section{Citations}
+
+\begin{itemize}
+\item IMF, National Economic Accounts, Quarterly (QNEA) and Annual (ANEA).
+\item IMF, Exchange Rates (ER), domestic currency per US dollar, period average.
+\item ILOSTAT, Employment by sex and age (\texttt{EMP\_TEMP\_SEX\_AGE\_NB});
+ILO modelled estimates (\texttt{EMP\_2EMP\_SEX\_AGE\_NB}) as a last-resort
+source (unused in this vintage).
+\end{itemize}
+
+Cite the vintage of the cached files in \texttt{raw/} (download date $=$ file
+timestamps).
+
+\clearpage
+\appendix
+\section{Country coverage}
+\input{coverage_table.tex}
+
+\end{document}

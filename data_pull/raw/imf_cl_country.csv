@@ -1,0 +1,344 @@
+iso3,country_name
+AFG,"Afghanistan, Islamic Republic of"
+ALB,Albania
+DZA,Algeria
+ASM,American Samoa
+AND,"Andorra, Principality of"
+AGO,Angola
+AIA,"Anguilla, United Kingdom-British Overseas Territory"
+ATG,Antigua and Barbuda
+ARG,Argentina
+ARM,"Armenia, Republic of"
+ABW,"Aruba, Kingdom of the Netherlands"
+AUS,Australia
+AUT,Austria
+AZE,"Azerbaijan, Republic of"
+BHS,"Bahamas, The"
+BHR,"Bahrain, Kingdom of"
+BGD,Bangladesh
+BRB,Barbados
+BLR,"Belarus, Republic of"
+BEL,Belgium
+BLZ,Belize
+BEN,Benin
+BMU,Bermuda
+BTN,Bhutan
+BOL,Bolivia
+BIH,Bosnia and Herzegovina
+BWA,Botswana
+BRA,Brazil
+VGB,British Virgin Islands
+BRN,Brunei Darussalam
+BGR,Bulgaria
+BFA,Burkina Faso
+BDI,Burundi
+CPV,Cabo Verde
+KHM,Cambodia
+CMR,Cameroon
+CAN,Canada
+CYM,Cayman Islands
+CAF,Central African Republic
+TCD,Chad
+CHL,Chile
+CHN,"China, People's Republic of"
+COL,Colombia
+COM,"Comoros, Union of the"
+COD,"Congo, Democratic Republic of the"
+COG,"Congo, Republic of"
+COK,Cook Islands
+CRI,Costa Rica
+HRV,"Croatia, Republic of"
+CUB,Cuba
+CUW,"Curaçao, Kingdom of the Netherlands"
+CYP,Cyprus
+CZE,Czech Republic
+CIV,Côte d'Ivoire
+DNK,Denmark
+DJI,Djibouti
+DMA,Dominica
+DOM,Dominican Republic
+ECU,Ecuador
+EGY,"Egypt, Arab Republic of"
+SLV,El Salvador
+GNQ,"Equatorial Guinea, Republic of"
+ERI,"Eritrea, The State of"
+EST,"Estonia, Republic of"
+SWZ,"Eswatini, Kingdom of"
+ETH,"Ethiopia, The Federal Democratic Republic of"
+FLK,Falkland Islands (Malvinas)
+FRO,Faroe Islands
+FJI,"Fiji, Republic of"
+FIN,Finland
+FRA,France
+GUF,French Guiana
+PYF,French Polynesia
+GAB,Gabon
+GMB,"Gambia, The"
+GEO,Georgia
+DEU,Germany
+GHA,Ghana
+GIB,Gibraltar
+GRC,Greece
+GRL,Greenland
+GRD,Grenada
+GLP,Guadeloupe
+GUM,Guam
+GTM,Guatemala
+GGY,Guernsey
+GIN,Guinea
+GNB,Guinea-Bissau
+GUY,Guyana
+HTI,Haiti
+VAT,Holy See
+HND,Honduras
+HKG,"Hong Kong Special Administrative Region, People's Republic of China"
+HUN,Hungary
+ISL,Iceland
+IND,India
+IDN,Indonesia
+IRN,"Iran, Islamic Republic of"
+IRQ,Iraq
+IRL,Ireland
+IMN,Isle of Man
+ISR,Israel
+ITA,Italy
+JAM,Jamaica
+JPN,Japan
+JEY,Jersey
+JOR,Jordan
+KAZ,"Kazakhstan, Republic of"
+KEN,Kenya
+KIR,Kiribati
+PRK,"Korea, Democratic People's Republic of"
+KOR,"Korea, Republic of"
+KOS,"Kosovo, Republic of"
+KWT,Kuwait
+KGZ,Kyrgyz Republic
+LAO,Lao People's Democratic Republic
+LVA,"Latvia, Republic of"
+LBN,Lebanon
+LSO,"Lesotho, Kingdom of"
+LBR,Liberia
+LBY,Libya
+LIE,"Liechtenstein, Principality of"
+LTU,"Lithuania, Republic of"
+LUX,Luxembourg
+MAC,"Macao Special Administrative Region, People's Republic of China"
+MDG,"Madagascar, Republic of"
+MWI,Malawi
+MYS,Malaysia
+MDV,Maldives
+MLI,Mali
+MLT,Malta
+MHL,"Marshall Islands, Republic of the"
+MTQ,Martinique
+MRT,"Mauritania, Islamic Republic of"
+MUS,Mauritius
+MYT,Mayotte
+MEX,Mexico
+FSM,"Micronesia, Federated States of"
+MDA,"Moldova, Republic of"
+MCO,Monaco
+MNG,Mongolia
+MNE,Montenegro
+MSR,"Montserrat, United Kingdom-British Overseas Territory"
+MAR,Morocco
+MOZ,"Mozambique, Republic of"
+MMR,Myanmar
+NAM,Namibia
+NRU,"Naoero, Republic of"
+NPL,Nepal
+NLD,"Netherlands, The"
+NCL,New Caledonia
+NZL,New Zealand
+NIC,Nicaragua
+NER,Niger
+NGA,Nigeria
+NIU,Niue
+NFK,Norfolk Island
+MKD,"North Macedonia, Republic of"
+MNP,Northern Mariana Islands
+NOR,Norway
+OMN,Oman
+PAK,Pakistan
+PLW,"Palau, Republic of"
+PAN,Panama
+PNG,Papua New Guinea
+PRY,Paraguay
+PER,Peru
+PHL,Philippines
+PCN,Pitcairn Islands
+POL,"Poland, Republic of"
+PRT,Portugal
+PRI,Puerto Rico
+QAT,Qatar
+ROU,Romania
+RUS,Russian Federation
+RWA,Rwanda
+REU,Réunion
+WSM,Samoa
+SMR,"San Marino, Republic of"
+SAU,Saudi Arabia
+SEN,Senegal
+SRB,"Serbia, Republic of"
+SYC,Seychelles
+SLE,Sierra Leone
+SGP,Singapore
+SXM,"Sint Maarten, Kingdom of the Netherlands"
+SVK,Slovak Republic
+SVN,"Slovenia, Republic of"
+SLB,Solomon Islands
+SOM,Somalia
+ZAF,South Africa
+SSD,"South Sudan, Republic of"
+ESP,Spain
+LKA,Sri Lanka
+SHN,St. Helena
+KNA,St. Kitts and Nevis
+LCA,St. Lucia
+SPM,St. Pierre and Miquelon
+VCT,St. Vincent and the Grenadines
+SDN,Sudan
+SUR,Suriname
+SJM,Svalbard and Jan Mayen Islands
+SWE,Sweden
+CHE,Switzerland
+SYR,Syrian Arab Republic
+STP,"São Tomé and Príncipe, Democratic Republic of"
+TWN,Taiwan Province of China
+TJK,"Tajikistan, Republic of"
+TZA,"Tanzania, United Republic of"
+THA,Thailand
+TLS,"Timor-Leste, Democratic Republic of"
+TGO,Togo
+TKL,Tokelau
+TON,Tonga
+TTO,Trinidad and Tobago
+TUN,Tunisia
+TKM,Turkmenistan
+TCA,Turks and Caicos Islands
+TUV,Tuvalu
+TUR,"Türkiye, Republic of"
+UGA,Uganda
+UKR,Ukraine
+ARE,United Arab Emirates
+GBR,United Kingdom
+USA,United States
+VIR,United States Virgin Islands
+URY,Uruguay
+UZB,"Uzbekistan, Republic of"
+VUT,Vanuatu
+VEN,"Venezuela, República Bolivariana de"
+VNM,Vietnam
+WLF,Wallis and Futuna Islands
+WBG,West Bank and Gaza
+YEM,"Yemen, Republic of"
+ZMB,Zambia
+ZWE,Zimbabwe
+ALA,Åland Islands
+BES,"Bonaire, Saint Eustatius and Saba"
+ATF,French Southern Territories
+CWX,Curaçao and Sint Maarten
+CSK,Czechoslovakia
+DDR,German Democratic Republic
+ANT,Netherlands Antilles
+VDR,"Vietnam, Democratic Republic of"
+SCG,Serbia and Montenegro
+SUN,Union of Soviet Socialist Republics (USSR)
+YAR,Yemen Arab Republic
+YMD,"Yemen, People's Democratic Republic of"
+YUG,"Yugoslavia, Socialist Federal Republic of"
+U019,Americas
+U015,Northern Africa
+U202,Sub-Saharan Africa
+U002,Africa
+U142,Asia
+U053,Australia and New Zealand
+U029,Caribbean
+U013,Central America
+U143,Central Asia
+U014,Eastern Africa
+U030,Eastern Asia
+U151,Eastern Europe
+U150,Europe
+U054,Melanesia
+U057,Micronesia
+U017,Middle Africa
+U154,Northern Europe
+U009,Oceania
+U061,Polynesia
+U005,South America
+U035,South-eastern Asia
+U018,Southern Africa
+U034,Southern Asia
+U039,Southern Europe
+U011,Western Africa
+U145,Western Asia
+U155,Western Europe
+G202,Advanced Asia
+G110,Advanced Economies
+G906,Advanced Europe
+G510,ASEAN-5
+G940,Caucasus and Central Asia (CCA)
+G758,Central African Economic and Monetary Community (CEMAC)
+G609,CFA franc zone
+G619,East African Community (EAC)
+G309,Eastern Caribbean Currency Union (ECCU)
+G776,Economic Community of West African States (ECOWAS)
+G209,EMDEs by External Financing: Net Creditors
+G606,EMDEs by External Financing: Net Debtors
+G087,EMDEs by External Financing: Net Debtors with Arrears and/or Reschedulings
+G216,EMDEs by Source of Export Earnings: Diversified
+G080,EMDEs by Source of Export Earnings: Fuel
+G083,EMDEs by Source of Export Earnings: Manufactures
+G092,EMDEs by Source of Export Earnings: Nonfuel
+G089,EMDEs by Source of Export Earnings: Primary Products (excluding Fuel)
+G084,"EMDEs by Source of Export Earnings: Services (including Income, Transfers)"
+G505,Emerging and Developing Asia
+G903,Emerging and Developing Europe
+G1515,Emerging Asia
+G200,Emerging Market and Developing Economies
+G1201,Emerging Market and Middle-Income Economies
+G995,Euro Area (EA) – aggregate of member states
+G998,European Union (EU)
+G715,Fragile and Conflict-affected States (FCS)
+G120,G20
+G119,G7
+G450,Gulf Cooperation Council (GCC)
+G711,Heavily Indebted Poor Countries (HIPC)
+G205,Latin America and the Caribbean (LAC)
+G201,Low-Income Developing Countries (LIDC)
+G400,Middle East and Central Asia
+G401,Middle East and Central Asia: Oil Exporters
+G402,Middle East and Central Asia: Oil Importers
+G406,Middle East and North Africa (MENA)
+G92031,North America
+G757,Southern African Customs Union (SACU)
+G603,Sub-Saharan Africa (SSA)
+G1627,Sub-Saharan Africa (SSA): Low-Income
+G1626,Sub-Saharan Africa (SSA): Middle-Income
+G1614,Sub-Saharan Africa (SSA): Oil Exporters
+G759,West African Economic and Monetary Union (WAEMU)
+G001,World
+G163,Euro Area (EA)
+GASEAN,ASEAN
+G765,Southern African Development Community (SADC)
+G760,Common Market for Eastern and Southern Africa (COMESA)
+G129,Benelux
+BLM,Saint Barthelemy
+MAF,Saint Martin
+SGS,South Georgia and the South Sandwich Islands
+CXR,Christmas Island
+CCK,Cocos Islands
+ESH,Western Sahara
+BVT,Bouvet Island
+IOT,British Indian Ocean Territory
+HMD,Heard Island and McDonald Islands
+UMI,United States Minor Outlying Islands
+GSAC,Southern African Customs Union (SACU)
+AFR,Africa (AFR)
+APD,Asia and Pacific (APD)
+EUR,Europe (EUR)
+MCD,Middle East and Central Asia (MCD)
+WHD,Western Hemisphere (WHD)
+SDS,Small Developing States (SDS)
