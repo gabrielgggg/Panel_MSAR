@@ -60,12 +60,13 @@ CF_CUTOFF_YEARS_DEFAULT = 15.0
 RHO_MAX = 0.995
 
 
-def _rho_from_u(u):
-    return RHO_MAX * np.tanh(np.asarray(u, dtype=float))
+def _rho_from_u(u, rho_max=RHO_MAX):
+    return float(rho_max) * np.tanh(np.asarray(u, dtype=float))
 
 
-def _u_from_rho(r):
-    x = np.clip(np.asarray(r, dtype=float) / RHO_MAX, -0.999999, 0.999999)
+def _u_from_rho(r, rho_max=RHO_MAX):
+    cap = float(rho_max)
+    x = np.clip(np.asarray(r, dtype=float) / cap, -0.999999, 0.999999)
     return np.arctanh(x)
 
 
@@ -382,6 +383,7 @@ class PanelMSARResults:
     cf_high: float = 0.0
     zero_mu: bool = False
     random_intercepts: bool = False
+    rho_max: float = 0.995
 
     def summary(self) -> str:
         k = self.n_regimes
@@ -659,6 +661,9 @@ class PanelMSAR:
         Drop countries shorter than this many *observations* (after keeping
         the longest spell). Not years — 8 is 8 quarters if the panel is
         quarterly. Must be at least 2.
+    rho_max : float
+        Strict upper bound on |rho|. Unconstrained parameter is
+        artanh(rho / rho_max). Default 0.995.
     """
 
     def __init__(
@@ -673,6 +678,7 @@ class PanelMSAR:
         cf_cutoff=CF_CUTOFF_YEARS_DEFAULT,
         zero_mu=False,
         min_t=8,
+        rho_max=RHO_MAX,
     ):
         if not isinstance(n_regimes, (int, np.integer)):
             raise TypeError(
@@ -718,6 +724,12 @@ class PanelMSAR:
             )
         self.zero_mu = bool(zero_mu)
         self.min_t = int(min_t)
+        rho_max = float(rho_max)
+        if not np.isfinite(rho_max) or rho_max <= 0.0 or rho_max >= 1.0:
+            raise ValueError(
+                f"rho_max must be in (0, 1) (got {rho_max})."
+            )
+        self.rho_max = rho_max
         self.res_ = None
         self._ols = None
         self._ag_cache = None
@@ -963,10 +975,10 @@ class PanelMSAR:
         P = _softmax_rows(logits)
 
         if not self.common_rho:
-            rho = _rho_from_u(theta[i:i + k])
+            rho = _rho_from_u(theta[i:i + k], self.rho_max)
             i += k
         else:
-            rho = np.full(k, float(_rho_from_u(theta[i])))
+            rho = np.full(k, float(_rho_from_u(theta[i], self.rho_max)))
             i += 1
 
         mu = np.zeros(k)
@@ -1006,9 +1018,9 @@ class PanelMSAR:
         raw = logits[:, : k - 1] - logits[:, k - 1][:, None]
         th = list(raw.ravel())
         if not self.common_rho:
-            th += [float(_u_from_rho(r)) for r in rho]
+            th += [float(_u_from_rho(r, self.rho_max)) for r in rho]
         else:
-            th += [float(_u_from_rho(np.mean(rho)))]
+            th += [float(_u_from_rho(np.mean(rho), self.rho_max))]
         th += [float(mu[s]) for s in self._free_mu_indices()]
         if not self.common_sigma:
             th += [float(np.log(s)) for s in sig]
@@ -1521,14 +1533,15 @@ class PanelMSAR:
         if "log_omega" in raw:
             out["omega"] = raw["log_omega"] * float(p.get("omega", 0.0))
 
+        cap = float(self.rho_max)
         if not self.common_rho:
             out["rho"] = np.array([
-                raw[f"rho[{s}]"] * RHO_MAX * (1.0 - (p["rho"][s] / RHO_MAX) ** 2)
+                raw[f"rho[{s}]"] * cap * (1.0 - (p["rho"][s] / cap) ** 2)
                 for s in range(k)
             ])
         else:
             r = float(p["rho"][0])
-            out["rho"] = raw["rho"] * RHO_MAX * (1.0 - (r / RHO_MAX) ** 2)
+            out["rho"] = raw["rho"] * cap * (1.0 - (r / cap) ** 2)
 
         mu_se = np.full(k, np.nan)
         if self.zero_mu:
@@ -1859,6 +1872,7 @@ class PanelMSAR:
             cf_high=float(self._cf_high) if self._cf_high is not None else 0.0,
             zero_mu=self.zero_mu,
             random_intercepts=self.random_intercepts,
+            rho_max=self.rho_max,
         )
         if detrend_pdf:
             self.res_.plot_detrended(detrend_pdf)
