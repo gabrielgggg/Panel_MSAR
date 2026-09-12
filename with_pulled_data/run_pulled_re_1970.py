@@ -1,4 +1,4 @@
-"""Common linear trend + RE intercepts on data_pull GDP per worker, 1970Q1+."""
+"""Common linear trend + RE intercepts on data_pull GDP per worker (full sample)."""
 from __future__ import annotations
 
 import sys
@@ -90,7 +90,7 @@ def _tex_report(sample_line, fitted):
         r"\setlength{\parindent}{0pt}",
         r"\setlength{\parskip}{0.6em}",
         r"\captionsetup{font=small,skip=6pt}",
-        r"\title{Panel MS-AR(1) with random-effects intercepts, 1970Q1 onward\\[0.4em]"
+        r"\title{Panel MS-AR(1) with random-effects intercepts, full sample\\[0.4em]"
         r"\large Pulled real GDP per worker}",
         r"\author{}",
         r"\date{}",
@@ -115,7 +115,7 @@ def _tex_report(sample_line, fitted):
         r"posterior mean of $a_i$. "
         r"Latent paths $s_{it}$ are country-specific. The regime dated $t$ governs "
         r"the transition from $z_t$ to $z_{t+1}$. $\sigma$ and $\rho$ switch with the "
-        r"regime. The median $\mu$ is pinned at 0. $|\rho|<0.995$.",
+        r"regime. The median $\mu$ is pinned at 0. $|\rho|<0.99$.",
         r"Standard errors (in parentheses) are delta-method from a numerical Hessian "
         r"on shared parameters. $\pi$ is the ergodic distribution of $\Pi$. "
         r"$E[z]$ is the long-run mean of the cycle implied by $\mu$, $\rho$, and $\Pi$.",
@@ -169,6 +169,7 @@ def fit_spec(df, spec, verbose=True):
         two_step=False,
         zero_mu=False,
         min_t=12,
+        rho_max=0.99,
     )
     res = mod.fit(
         df["country"],
@@ -183,10 +184,10 @@ def fit_spec(df, spec, verbose=True):
     )
     txt = HERE / f"output_{spec['key']}.txt"
     header = (
-        f"Pulled log real GDP per worker from 1970Q1\n"
+        f"Pulled log real GDP per worker, full sample\n"
         f"source={CSV.as_posix()}\n{spec['title']}\n"
         f"random_intercepts={spec['random_intercepts']}  "
-        f"n_starts=4  rho_max=0.995  compute_se=True\n\n"
+        f"n_starts=4  rho_max=0.99  compute_se=True\n\n"
     )
     txt.write_text(header + res.summary() + "\n", encoding="utf-8")
     print(res, flush=True)
@@ -196,10 +197,9 @@ def fit_spec(df, spec, verbose=True):
 
 def main():
     df = load_pulled_panel()
-    df = df.loc[df["time"] >= 1970.0].copy()
     df.to_csv(SAMPLE_CSV, index=False)
     sample_line = (
-        rf"Pulled panel from 1970Q1: log real GDP per worker. "
+        rf"Pulled panel, full sample: log real GDP per worker. "
         rf"{df.country.nunique()} countries, {len(df)} observations, "
         rf"{df.period.min()}--{df.period.max()}."
     )
