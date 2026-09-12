@@ -5,6 +5,7 @@ __pycache__/
 venv/
 .env
 *.png
+output*.txt
 data/demo_oecd_eo_raw.csv
 
 # LaTeX aux
