@@ -231,15 +231,30 @@ def _trend_note(res):
         return " ".join(bits)
     a, g = pr.get("a"), pr.get("g")
     if getattr(res, "random_intercepts", False):
-        al, om = pr.get("alpha"), pr.get("omega")
-        sa = se.get("alpha")
-        so = se.get("omega")
-        extra_a = f" ({float(sa):.4f})" if sa is not None and np.isfinite(float(sa)) else ""
-        extra_o = f" ({float(so):.4f})" if so is not None and np.isfinite(float(so)) else ""
-        bits.append(
-            rf"Random intercepts $a_i\sim N(\alpha,\omega^2)$ with "
-            rf"$\alpha={float(al):.4f}${extra_a}, $\omega={float(om):.4f}${extra_o}."
-        )
+        if getattr(res, "re_family", "normal") == "pareto":
+            loc, sc, sh = pr.get("pareto_loc"), pr.get("pareto_scale"), pr.get("pareto_shape")
+            sl = se.get("pareto_loc")
+            ss = se.get("pareto_scale")
+            ssh = se.get("pareto_shape")
+            extra_l = f" ({float(sl):.4f})" if sl is not None and np.isfinite(float(sl)) else ""
+            extra_s = f" ({float(ss):.4f})" if ss is not None and np.isfinite(float(ss)) else ""
+            extra_h = f" ({float(ssh):.4f})" if ssh is not None and np.isfinite(float(ssh)) else ""
+            bits.append(
+                rf"Random intercepts Type II Pareto on $[m,\infty)$ with "
+                rf"location $m={float(loc):.4f}${extra_l}, "
+                rf"scale $={float(sc):.4f}${extra_s}, "
+                rf"shape $\alpha={float(sh):.4f}${extra_h}."
+            )
+        else:
+            al, om = pr.get("alpha"), pr.get("omega")
+            sa = se.get("alpha")
+            so = se.get("omega")
+            extra_a = f" ({float(sa):.4f})" if sa is not None and np.isfinite(float(sa)) else ""
+            extra_o = f" ({float(so):.4f})" if so is not None and np.isfinite(float(so)) else ""
+            bits.append(
+                rf"Random intercepts $a_i\sim N(\alpha,\omega^2)$ with "
+                rf"$\alpha={float(al):.4f}${extra_a}, $\omega={float(om):.4f}${extra_o}."
+            )
         if isinstance(a, dict):
             aa = np.array(list(a.values()), dtype=float)
             bits.append(

@@ -418,6 +418,7 @@ class PanelMSARResults:
     random_intercepts: bool = False
     quarter_dummies: bool = False
     random_seasonals: bool = False
+    re_family: str = "normal"
     rho_max: float = 0.995
 
     def summary(self) -> str:
@@ -487,16 +488,29 @@ class PanelMSARResults:
                 "then MS-AR on residuals."
             )
         if self.random_intercepts:
-            al = float(pr.get("alpha", 0.0))
-            om = float(pr.get("omega", 0.0))
-            se_al = se.get("alpha") if have_se else None
-            se_om = se.get("omega") if have_se else None
-            lines.append(f"{'alpha (RE)':<{lab}}{_cell_est(al, W)}")
-            if have_se:
-                lines.append(f"{'':<{lab}}{_cell_se(se_al, W)}")
-            lines.append(f"{'omega (RE)':<{lab}}{_cell_est(om, W)}")
-            if have_se:
-                lines.append(f"{'':<{lab}}{_cell_se(se_om, W)}")
+            if getattr(self, "re_family", "normal") == "pareto":
+                for name, labn in (
+                    ("pareto_loc", "pareto loc"),
+                    ("pareto_scale", "pareto scale"),
+                    ("pareto_shape", "pareto shape"),
+                ):
+                    v = pr.get(name)
+                    if v is None:
+                        continue
+                    lines.append(f"{labn:<{lab}}{_cell_est(float(v), W)}")
+                    if have_se:
+                        lines.append(f"{'':<{lab}}{_cell_se(se.get(name), W)}")
+            else:
+                al = float(pr.get("alpha", 0.0))
+                om = float(pr.get("omega", 0.0))
+                se_al = se.get("alpha") if have_se else None
+                se_om = se.get("omega") if have_se else None
+                lines.append(f"{'alpha (RE)':<{lab}}{_cell_est(al, W)}")
+                if have_se:
+                    lines.append(f"{'':<{lab}}{_cell_se(se_al, W)}")
+                lines.append(f"{'omega (RE)':<{lab}}{_cell_est(om, W)}")
+                if have_se:
+                    lines.append(f"{'':<{lab}}{_cell_se(se_om, W)}")
         if self.two_step != "cf" and (self.country_intercepts or self.random_intercepts):
             aa = np.array(list(pr["a"].values()) if isinstance(pr["a"], dict) else [pr["a"]], dtype=float)
             lab_a = "a (post. mean)" if self.random_intercepts else "a (country)"
@@ -721,6 +735,11 @@ class PanelMSAR:
         jointly with a_i. The 4-dimensional country integral uses a Laplace
         approximation. Implies random_intercepts and quarter_dummies.
         Incompatible with two_step and country_trends.
+    re_family : str
+        Distribution of a_i when random_intercepts is True. 'normal' uses
+        N(alpha, omega^2) and Gauss-Hermite. 'pareto' uses a shifted Type II
+        Pareto (Lomax) on [loc, inf): location, scale, and shape, integrated
+        by Gauss-Legendre on the probability-integral-transform scale.
     """
 
     def __init__(
@@ -738,6 +757,7 @@ class PanelMSAR:
         rho_max=RHO_MAX,
         quarter_dummies=False,
         random_seasonals=False,
+        re_family="normal",
     ):
         if not isinstance(n_regimes, (int, np.integer)):
             raise TypeError(
@@ -769,6 +789,14 @@ class PanelMSAR:
         if self.random_seasonals:
             self.random_intercepts = True
             self.quarter_dummies = True
+        fam = str(re_family).strip().lower()
+        if fam not in ("normal", "pareto"):
+            raise ValueError("re_family must be 'normal' or 'pareto'.")
+        self.re_family = fam
+        if self.re_family == "pareto":
+            self.random_intercepts = True
+        if self.re_family == "pareto" and self.random_seasonals:
+            raise ValueError("re_family='pareto' cannot be combined with random_seasonals.")
         if self.random_intercepts and self.two_step:
             raise ValueError("random_intercepts cannot be combined with two_step.")
         if self.random_intercepts and self.country_trends:
@@ -781,6 +809,9 @@ class PanelMSAR:
         xz, w = np.polynomial.hermite.hermgauss(11)
         self._gh_z = xz * np.sqrt(2.0)
         self._gh_w = w / np.sqrt(np.pi)
+        glx, glw = np.polynomial.legendre.leggauss(15)
+        self._gl_u = np.clip(0.5 * (glx + 1.0), 1e-8, 1.0 - 1e-8)
+        self._gl_w = 0.5 * glw
         self.cf_cutoff = float(cf_cutoff)
         if self.two_step == "cf" and (
             not np.isfinite(self.cf_cutoff) or self.cf_cutoff <= 0
@@ -1030,7 +1061,10 @@ class PanelMSAR:
             if self.quarter_dummies:
                 names += ["dQ2", "dQ3", "dQ4"]
             if self.random_intercepts:
-                names += ["alpha", "log_omega"]
+                if self.re_family == "pareto":
+                    names += ["pareto_loc", "log_pareto_scale", "log_pareto_shape"]
+                else:
+                    names += ["alpha", "log_omega"]
             elif self._outer_has_a():
                 names += ["a"]
         return names
@@ -1094,11 +1128,29 @@ class PanelMSAR:
                 d = np.asarray(theta[i:i + 3], dtype=float)
                 i += 3
             if self.random_intercepts:
-                a = theta[i]
-                i += 1
-                omega = float(np.exp(np.clip(theta[i], -12.0, 5.0)))
+                if self.re_family == "pareto":
+                    a = theta[i]
+                    i += 1
+                    pscale = float(np.exp(np.clip(theta[i], -12.0, 5.0)))
+                    i += 1
+                    pshape = float(np.exp(np.clip(theta[i], -0.7, 3.7)))
+                    omega = pscale
+                else:
+                    a = theta[i]
+                    i += 1
+                    omega = float(np.exp(np.clip(theta[i], -12.0, 5.0)))
+                    pscale = 0.0
+                    pshape = 0.0
             elif self._outer_has_a():
                 a = theta[i]
+                pscale = 0.0
+                pshape = 0.0
+            else:
+                pscale = 0.0
+                pshape = 0.0
+        if self.random_seasonals:
+            pscale = 0.0
+            pshape = 0.0
         return {
             "P": P, "rho": rho, "mu": mu, "sigma": sig, "g": g, "a": a,
             "alpha": a, "omega": omega,
@@ -1107,9 +1159,15 @@ class PanelMSAR:
             "omega_Q2": float(omega_d[0]),
             "omega_Q3": float(omega_d[1]),
             "omega_Q4": float(omega_d[2]),
+            "pareto_loc": float(a) if self.re_family == "pareto" else 0.0,
+            "pareto_scale": float(pscale),
+            "pareto_shape": float(pshape),
         }
 
-    def _pack_from_dicts(self, P, rho, mu, sig, g, a, omega=None, d=None, omega_d=None):
+    def _pack_from_dicts(
+        self, P, rho, mu, sig, g, a, omega=None, d=None, omega_d=None,
+        pareto_scale=None, pareto_shape=None,
+    ):
         k = self.n_regimes
         logits = np.log(np.clip(P, 1e-12, 1.0))
         raw = logits[:, : k - 1] - logits[:, k - 1][:, None]
@@ -1141,9 +1199,18 @@ class PanelMSAR:
             if self.quarter_dummies:
                 th += [float(dd[0]), float(dd[1]), float(dd[2])]
             if self.random_intercepts:
-                th += [float(a)]
-                om = 0.2 if omega is None else float(omega)
-                th += [float(np.log(max(om, 1e-8)))]
+                if self.re_family == "pareto":
+                    th += [float(a)]
+                    sc = 0.3 if pareto_scale is None else float(pareto_scale)
+                    sh = 3.0 if pareto_shape is None else float(pareto_shape)
+                    th += [
+                        float(np.log(max(sc, 1e-8))),
+                        float(np.log(max(sh, 1e-8))),
+                    ]
+                else:
+                    th += [float(a)]
+                    om = 0.2 if omega is None else float(omega)
+                    th += [float(np.log(max(om, 1e-8)))]
             elif self._outer_has_a():
                 th += [float(a)]
         return np.asarray(th, dtype=float)
@@ -1385,10 +1452,23 @@ class PanelMSAR:
         self._ag_cache = list(zip(a_hat.tolist(), g_hat.tolist()))
         return ll, a_hat, g_hat, p
 
-    def _country_ll_re(self, y, t, p, pi0):
-        """log ∫ L(y | a) N(a; alpha, omega^2) da  (Gauss-Hermite)."""
+    def _re_nodes(self, p):
+        """Quadrature nodes and weights for ∫ L(a) p(a) da."""
+        if self.re_family == "pareto":
+            loc = float(p["pareto_loc"])
+            scale = max(float(p["pareto_scale"]), 1e-8)
+            shape = max(float(p["pareto_shape"]), 0.5)
+            u = self._gl_u
+            aks = loc + scale * (np.power(1.0 - u, -1.0 / shape) - 1.0)
+            wks = self._gl_w
+            return aks, wks
         alpha = float(p["alpha"])
         omega = max(float(p["omega"]), 1e-8)
+        aks = alpha + omega * self._gh_z
+        return aks, self._gh_w
+
+    def _country_ll_re(self, y, t, p, pi0):
+        """log ∫ L(y | a) p(a) da."""
         g = float(p["g"])
         rho = np.ascontiguousarray(p["rho"], dtype=np.float64)
         mu = np.ascontiguousarray(p["mu"], dtype=np.float64)
@@ -1396,18 +1476,18 @@ class PanelMSAR:
         P = np.ascontiguousarray(p["P"], dtype=np.float64)
         y = np.ascontiguousarray(y, dtype=np.float64)
         t = np.ascontiguousarray(t, dtype=np.float64)
-        nq = self._gh_z.size
+        aks, wks = self._re_nodes(p)
+        nq = aks.size
         logc = np.empty(nq)
         for k in range(nq):
-            a = alpha + omega * self._gh_z[k]
-            z = y - self._trend(a, g, t, p.get("d"))
+            z = y - self._trend(float(aks[k]), g, t, p.get("d"))
             try:
                 ll = _country_ll_nb(z, rho, mu, sig, P, pi0)
             except Exception:
                 ll = -1e12
             if not np.isfinite(ll):
                 ll = -1e12
-            logc[k] = np.log(max(float(self._gh_w[k]), 1e-300)) + float(ll)
+            logc[k] = np.log(max(float(wks[k]), 1e-300)) + float(ll)
         m = float(np.max(logc))
         return m + float(np.log(np.sum(np.exp(logc - m))))
 
@@ -1425,18 +1505,16 @@ class PanelMSAR:
         return ll
 
     def _re_posterior_a(self, packed, p):
-        """Posterior mean E[a_i | data] at the GH nodes."""
+        """Posterior mean E[a_i | data] at the quadrature nodes."""
         ycat, tcat, lengths, offsets = packed
         pi0 = _stationary_probs(p["P"]).astype(np.float64)
-        alpha = float(p["alpha"])
-        omega = max(float(p["omega"]), 1e-8)
         n = int(lengths.shape[0])
         a_hat = np.empty(n)
-        aks = alpha + omega * self._gh_z
+        aks, wks = self._re_nodes(p)
         for i in range(n):
             sl = slice(int(offsets[i]), int(offsets[i] + lengths[i]))
-            logc = np.empty(self._gh_z.size)
-            for k in range(self._gh_z.size):
+            logc = np.empty(aks.size)
+            for k in range(aks.size):
                 z = ycat[sl] - self._trend(aks[k], p["g"], tcat[sl], p.get("d"))
                 try:
                     ll = _country_ll_nb(
@@ -1449,7 +1527,7 @@ class PanelMSAR:
                     )
                 except Exception:
                     ll = -1e12
-                logc[k] = np.log(max(float(self._gh_w[k]), 1e-300)) + float(ll)
+                logc[k] = np.log(max(float(wks[k]), 1e-300)) + float(ll)
             w = np.exp(logc - np.max(logc))
             w = w / w.sum()
             a_hat[i] = float(np.dot(w, aks))
@@ -1645,10 +1723,16 @@ class PanelMSAR:
 
         omega0 = 0.2
         omega_d0 = np.full(3, 0.05)
+        pscale0, pshape0 = 0.3, 3.0
         if self.random_intercepts:
             ais = [self._ols_ag(y, t)[0] for y, t in panels]
-            a0 = float(np.mean(ais))
-            omega0 = float(np.std(ais, ddof=1) or 0.3)
+            if self.re_family == "pareto":
+                a0 = float(np.min(ais) - 0.3)
+                pscale0 = float(max(np.std(ais, ddof=1) or 0.3, 0.05))
+                pshape0 = 3.0
+            else:
+                a0 = float(np.mean(ais))
+                omega0 = float(np.std(ais, ddof=1) or 0.3)
         if self.random_seasonals:
             ds = []
             for y, t in panels:
@@ -1664,6 +1748,7 @@ class PanelMSAR:
             th = self._pack_from_dicts(
                 P, np.full(k, rho), mu, np.asarray(sigs, float), g, a,
                 omega=om, d=d0, omega_d=omega_d0,
+                pareto_scale=pscale0, pareto_shape=pshape0,
             )
             if jitter:
                 th = th + rng.normal(0.0, jitter, size=th.shape)
@@ -1716,6 +1801,8 @@ class PanelMSAR:
             return self._pack_from_dicts(
                 P, rho, mu, sig, p["g"], p["a"], omega=p.get("omega"),
                 d=p.get("d"), omega_d=p.get("omega_d"),
+                pareto_scale=p.get("pareto_scale"),
+                pareto_shape=p.get("pareto_shape"),
             )
         order = np.argsort(p["mu"])
         mu = p["mu"][order]
@@ -1732,6 +1819,8 @@ class PanelMSAR:
         return self._pack_from_dicts(
             P, rho, mu, sig, g, a, omega=p.get("omega"),
             d=p.get("d"), omega_d=p.get("omega_d"),
+            pareto_scale=p.get("pareto_scale"),
+            pareto_shape=p.get("pareto_shape"),
         )
 
     def _se_P(self, P, cov):
@@ -1776,6 +1865,12 @@ class PanelMSAR:
             out["alpha"] = raw["alpha"]
         if "log_omega" in raw:
             out["omega"] = raw["log_omega"] * float(p.get("omega", 0.0))
+        if "pareto_loc" in raw:
+            out["pareto_loc"] = raw["pareto_loc"]
+        if "log_pareto_scale" in raw:
+            out["pareto_scale"] = raw["log_pareto_scale"] * float(p.get("pareto_scale", 0.0))
+        if "log_pareto_shape" in raw:
+            out["pareto_shape"] = raw["log_pareto_shape"] * float(p.get("pareto_shape", 0.0))
         for name in ("dQ2", "dQ3", "dQ4"):
             if name in raw:
                 out[name] = raw[name]
@@ -2089,6 +2184,10 @@ class PanelMSAR:
         if self.random_intercepts:
             params["alpha"] = float(p["alpha"])
             params["omega"] = float(p["omega"])
+            if self.re_family == "pareto":
+                params["pareto_loc"] = float(p["pareto_loc"])
+                params["pareto_scale"] = float(p["pareto_scale"])
+                params["pareto_shape"] = float(p["pareto_shape"])
         if self.quarter_dummies or self.random_seasonals:
             params["dQ2"] = float(p["dQ2"])
             params["dQ3"] = float(p["dQ3"])
@@ -2155,6 +2254,7 @@ class PanelMSAR:
             random_intercepts=self.random_intercepts,
             quarter_dummies=self.quarter_dummies,
             random_seasonals=self.random_seasonals,
+            re_family=self.re_family,
             rho_max=self.rho_max,
         )
         if detrend_pdf:
