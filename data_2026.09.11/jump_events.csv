@@ -1,0 +1,18 @@
+iso3,country,from,to,dlog_y,pct,driver,what_changed,verdict
+SLV,El Salvador,2004-Q4,2005-Q1,3.954,5116,GDP,"GDP 85 -> 4352 (x51); NER=1; empl unchanged",IFS real GDP units/scale break at 2005 base year; not a FX redenomination
+SVK,Slovak Republic,1999-Q4,2000-Q1,1.384,299,employment,"empl 2118 -> 524 (x0.25)",employment in thousands of persons vs a 4x-too-small unit for 2000-2001 only
+SVK,Slovak Republic,2001-Q4,2002-Q1,-1.450,-77,employment,"empl 535 -> 2105 (x3.94)",reverts to the pre-2000 employment scale
+ISR,Israel,2016-Q4,2017-Q1,1.358,289,employment,"empl 3756 -> 944 (x0.25)",same 4x employment-unit break for 2017 only
+ISR,Israel,2017-Q4,2018-Q1,-1.407,-76,employment,"empl 959 -> 3865 (x4.03)",reverts to the usual thousands-of-persons scale
+MNE,Montenegro,2022-Q4,2023-Q1,-1.806,-84,employment,"empl 256 -> 1113 (x4.35); 2023Q1-Q4 stuck at 1113.145",wrong employment level pasted onto all of 2023 (about 4x too high)
+MNE,Montenegro,2023-Q4,2024-Q1,1.034,181,employment,"empl 1113 -> 281 (x0.25)",returns to the ~0.28 million scale
+PER,Peru,2010-Q4,2011-Q1,-1.314,-73,employment,"empl 4424 -> 16136 (x3.65)",coverage/definition break (urban/formal vs broader employment); not exactly 4x
+SYC,Seychelles,2015-Q4,2016-Q1,1.029,180,employment,"empl 27.9 -> 10.4; source annual-interp -> quarterly",employment source/scale switch
+SYC,Seychelles,2016-Q4,2017-Q1,-1.238,-71,employment,"empl 11.3 -> 39.3 (x3.5)",employment jumps back up; GDP flat
+PRY,Paraguay,2009-Q4,2010-Q1,1.118,206,employment,"empl 2850 -> 925; annual-interp -> quarterly",employment source/scale switch
+PRY,Paraguay,2016-Q4,2017-Q1,-0.881,-59,employment,"empl 1099 -> 2732 (x2.5)",employment scale/source switch
+DOM,Dominican Republic,2003-Q1,2015-Q1,0.70,100,employment,"quarterly observed ~1.6-2.0m vs annual-interp ~3.2-4.0m",repeating ~2x sawtooth whenever empl_source toggles; not a one-off jump
+BOL,Bolivia,1996-Q4,1997-Q1,-0.517,-40,employment,"empl 1729 -> 2758 (x1.6)",employment level break; GDP almost unchanged
+MAC,Macao,2019-Q4,2020-Q1,-0.662,-48,GDP,"GDP 113384 -> 59584; empl flat",COVID tourism collapse; real
+ROM,Romania,1997-Q4,1998-Q1,-0.607,-45,GDP,"Q4 to Q1 NSA drop; repeats 1996/99/2009",non-seasonally-adjusted GDP seasonality (and 2009 crisis); 2005 leu reform is smooth
+EGY,Egypt,2022-Q2,2022-Q3,0.582,79,GDP,"GDP 1.16e6 -> 2.09e6; empl flat",one-quarter GDP level jump; not employment and not NER

@@ -1,0 +1,120 @@
+\documentclass[11pt]{article}
+\usepackage[margin=0.75in,landscape]{geometry}
+\usepackage{amsmath,amssymb,booktabs,longtable,array,setspace,caption,hyperref}
+\usepackage[T1]{fontenc}
+\usepackage{mathpazo}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}
+\captionsetup{font=small,skip=6pt}
+\title{Sharp jumps in $z_{it}$: countries, dates, and causes\\[0.4em]
+\large 2026-09-11 panel, RE intercepts specification}
+\author{}
+\date{}
+\begin{document}
+\maketitle
+
+\section{Setup}
+
+The fitted trend is linear in calendar time (common $g$, country intercept $a_i$).
+A cliff in the plotted cycle is therefore a cliff in log real GDP per worker.
+Consecutive-quarter changes with $|\Delta y|\ge 0.25$ (about 28\% QoQ) were
+flagged and split into local GDP, USD GDP, employment, and the base-year
+exchange rate.
+
+\section{Main finding}
+
+Currency units are not the main story.
+The base-year exchange rate is a country constant; its log-difference
+is zero at every flagged jump.
+Known redenominations (Romania 2005, Belarus 2016, and others) are smooth in
+this file.
+The cliffs on the cycle plot are almost entirely \textbf{employment scale or
+source breaks}, plus one \textbf{GDP units break} (El Salvador, 2005).
+
+\section{Distinct level shifts}
+
+These are the one-time (or paired) cliffs, not repeating seasonality.
+$\Delta\log y$ is the change in log real GDP per worker from the previous
+quarter.
+
+{\small
+\setlength{\tabcolsep}{5pt}
+\begin{longtable}{@{}llp{2.6cm}lp{3.6cm}p{6.8cm}@{}}
+\toprule
+Country & Date & $\Delta\log y$ & Driver & What moved & Cause \\
+\midrule
+\endfirsthead
+\toprule
+Country & Date & $\Delta\log y$ & Driver & What moved & Cause \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+El Salvador & 2004Q4$\to$2005Q1 & $+3.95$ ($\times 52$) & GDP & GDP $85\to 4352$; empl flat; NER${}=1$ &
+IFS real GDP units/scale break at the 2005 base year (already dollarized; not a FX reform) \\
+\addlinespace
+Slovak Rep. & 1999Q4$\to$2000Q1 & $+1.38$ & employment & empl $2118\to 524$ ($\div 4$) &
+employment $4\times$ too small for 2000--01 \\
+\addlinespace
+Slovak Rep. & 2001Q4$\to$2002Q1 & $-1.45$ & employment & empl $535\to 2105$ ($\times 4$) &
+scale reverts \\
+\addlinespace
+Israel & 2016Q4$\to$2017Q1 & $+1.36$ & employment & empl $3756\to 944$ ($\div 4$) &
+same $4\times$ break for 2017 only \\
+\addlinespace
+Israel & 2017Q4$\to$2018Q1 & $-1.41$ & employment & empl $959\to 3865$ ($\times 4$) &
+scale reverts \\
+\addlinespace
+Montenegro & 2022Q4$\to$2023Q1 & $-1.81$ & employment & empl $256\to 1113$ ($\times 4.3$) &
+2023Q1--Q4 stuck at $1113.145$ (about $4\times$ too high) \\
+\addlinespace
+Montenegro & 2023Q4$\to$2024Q1 & $+1.03$ & employment & empl $1113\to 281$ ($\div 4$) &
+scale reverts \\
+\addlinespace
+Peru & 2010Q4$\to$2011Q1 & $-1.31$ & employment & empl $4424\to 16136$ ($\times 3.65$) &
+employment definition/coverage jump (not a clean $4\times$) \\
+\addlinespace
+Seychelles & 2015Q4$\to$2016Q1 & $+1.03$ & employment & empl $27.9\to 10.4$ &
+annual interpolation $\to$ quarterly employment \\
+\addlinespace
+Seychelles & 2016Q4$\to$2017Q1 & $-1.24$ & employment & empl $11.3\to 39.3$ ($\times 3.5$) &
+employment jumps back up; GDP flat \\
+\addlinespace
+Paraguay & 2009Q4$\to$2010Q1 & $+1.12$ & employment & empl $2850\to 925$ &
+annual interpolation $\to$ quarterly employment \\
+\addlinespace
+Paraguay & 2016Q4$\to$2017Q1 & $-0.88$ & employment & empl $1100\to 2732$ ($\times 2.5$) &
+employment scale/source switch \\
+\addlinespace
+Bolivia & 1996Q4$\to$1997Q1 & $-0.52$ & employment & empl $1729\to 2758$; GDP flat &
+employment level break \\
+\addlinespace
+Dominican Rep. & 2003--2015, many quarters & $\pm 0.67$ to $\pm 0.76$ & employment &
+quarterly observed $\sim$1.7m vs annual-interp $\sim$3.5m &
+repeating $\sim 2\times$ sawtooth when the employment source flips; not a one-off jump \\
+\addlinespace
+Macao & 2019Q4$\to$2020Q1 & $-0.66$ & GDP & GDP halves; empl flat &
+COVID tourism collapse (real) \\
+\addlinespace
+Egypt & 2022Q2$\to$2022Q3 & $+0.58$ & GDP & GDP $1.16\times 10^6\to 2.09\times 10^6$; empl flat &
+one-quarter GDP level jump; not employment and not NER \\
+\addlinespace
+Romania & Q4$\to$Q1 in 1997, 1998, 1999, 2009 & about $-0.5$ & GDP & GDP, not employment &
+NSA seasonal drop (and 2009); not the 2005 leu reform \\
+\end{longtable}
+}
+
+\section{Notes}
+
+Slovak Republic and Israel are the same $4\times$ employment-unit bug already
+patched in the SOE extract; it is back in this file.
+Montenegro 2023 looks like a single annual number copied into every quarter.
+
+NSA seasonality (Romania, Bulgaria, Montenegro, Mongolia, and others, with
+$|\Delta y|\approx 0.25$--$0.35$ every winter) is a repeating pattern, not a
+one-time cliff.
+
+Full consecutive-quarter list: z-jumps.csv (211 rows with
+$|\Delta y|\ge 0.25$). Distinct events: jump-events.csv.
+
+\end{document}
