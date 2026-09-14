@@ -266,6 +266,39 @@ def _trend_note(res):
         sg = se.get("g")
         extra = f" ({float(sg):.4f})" if sg is not None and np.isfinite(sg) else ""
         bits.append(rf"Common slope $g={float(g):.4f}${extra}.")
+    if getattr(res, "random_seasonals", False):
+        seas = []
+        for name, lab, omn in (
+            ("dQ2", r"\delta_{Q2}", "omega_Q2"),
+            ("dQ3", r"\delta_{Q3}", "omega_Q3"),
+            ("dQ4", r"\delta_{Q4}", "omega_Q4"),
+        ):
+            v = pr.get(name)
+            if v is None:
+                continue
+            s = se.get(name)
+            extra = f" ({float(s):.4f})" if s is not None and np.isfinite(float(s)) else ""
+            om = pr.get(omn)
+            so = se.get(omn)
+            extra_o = f" ({float(so):.4f})" if so is not None and np.isfinite(float(so)) else ""
+            om_bit = ""
+            if om is not None:
+                om_bit = rf", $\omega_{{{name[2:]}}}={float(om):.4f}${extra_o}"
+            seas.append(rf"${lab}={float(v):.4f}${extra}{om_bit}")
+        bits.append(
+            r"Random quarterly effects $d_{ji}\sim N(\delta_j,\omega_j^2)$ (Q1 omitted): "
+            + "; ".join(seas) + "."
+        )
+    elif getattr(res, "quarter_dummies", False) and pr.get("dQ2") is not None:
+        seas = []
+        for name, lab in (("dQ2", r"d_{Q2}"), ("dQ3", r"d_{Q3}"), ("dQ4", r"d_{Q4}")):
+            v = pr.get(name)
+            if v is None:
+                continue
+            s = se.get(name)
+            extra = f" ({float(s):.4f})" if s is not None and np.isfinite(float(s)) else ""
+            seas.append(rf"${lab}={float(v):.4f}${extra}")
+        bits.append("Seasonal dummies (Q1 omitted): " + ", ".join(seas) + ".")
     return " ".join(bits)
 
 

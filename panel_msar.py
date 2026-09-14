@@ -1,7 +1,7 @@
 """
 Joint panel Markov-switching AR(1) around a common log-linear trend.
 
-    y_it = a + g * t + z_it
+    y_it = a + g * t + [seasonal dummies] + z_it
 
     z_{i,t+1} = (1 - rho(s_it)) * mu(s_it) + rho(s_it) * z_it
                 + sigma(s_it) * eps_it
@@ -68,6 +68,39 @@ def _u_from_rho(r, rho_max=RHO_MAX):
     cap = float(rho_max)
     x = np.clip(np.asarray(r, dtype=float) / cap, -0.999999, 0.999999)
     return np.arctanh(x)
+
+
+def _quarter_dummies(t):
+    """Q2, Q3, Q4 indicators from year-fraction time (Q1 omitted)."""
+    t = np.asarray(t, dtype=float).reshape(-1)
+    frac = t - np.floor(t + 1e-12)
+    q = np.mod(np.rint(frac * 4.0).astype(np.int64), 4)
+    D = np.zeros((t.size, 3), dtype=np.float64)
+    D[:, 0] = q == 1
+    D[:, 1] = q == 2
+    D[:, 2] = q == 3
+    return D
+
+
+def _fd_hess(f, x, rel=1e-4):
+    """Central 4-point Hessian of a scalar function at x."""
+    x = np.asarray(x, dtype=float)
+    n = x.size
+    eps = rel * (1.0 + np.abs(x))
+    H = np.zeros((n, n))
+    for i in range(n):
+        ei = np.zeros(n)
+        ei[i] = eps[i]
+        for j in range(i, n):
+            ej = np.zeros(n)
+            ej[j] = eps[j]
+            fpp = float(f(x + ei + ej))
+            fpm = float(f(x + ei - ej))
+            fmp = float(f(x - ei + ej))
+            fmm = float(f(x - ei - ej))
+            H[i, j] = (fpp - fpm - fmp + fmm) / (4.0 * eps[i] * eps[j])
+            H[j, i] = H[i, j]
+    return H
 
 
 def _parse_two_step(two_step):
@@ -383,6 +416,8 @@ class PanelMSARResults:
     cf_high: float = 0.0
     zero_mu: bool = False
     random_intercepts: bool = False
+    quarter_dummies: bool = False
+    random_seasonals: bool = False
     rho_max: float = 0.995
 
     def summary(self) -> str:
@@ -481,6 +516,20 @@ class PanelMSARResults:
             lines.append(f"{'g':<{lab}}{_cell_est(g, W)}")
             if have_se:
                 lines.append(f"{'':<{lab}}{_cell_se(se_g, W)}")
+        if getattr(self, "quarter_dummies", False) or getattr(self, "random_seasonals", False):
+            for name in ("dQ2", "dQ3", "dQ4"):
+                if name not in pr:
+                    continue
+                lines.append(f"{name:<{lab}}{_cell_est(float(pr[name]), W)}")
+                if have_se:
+                    lines.append(f"{'':<{lab}}{_cell_se(se.get(name), W)}")
+            if getattr(self, "random_seasonals", False):
+                for name in ("omega_Q2", "omega_Q3", "omega_Q4"):
+                    if name not in pr:
+                        continue
+                    lines.append(f"{name:<{lab}}{_cell_est(float(pr[name]), W)}")
+                    if have_se:
+                        lines.append(f"{'':<{lab}}{_cell_se(se.get(name), W)}")
         if self.two_step == "quadratic" and "h" in pr:
             if self.country_trends:
                 hh = np.array(
@@ -664,6 +713,14 @@ class PanelMSAR:
     rho_max : float
         Strict upper bound on |rho|. Unconstrained parameter is
         artanh(rho / rho_max). Default 0.995.
+    quarter_dummies : bool
+        If True, the trend includes common Q2, Q3, Q4 dummies (Q1 omitted).
+        Incompatible with two_step.
+    random_seasonals : bool
+        If True, country Q2/Q3/Q4 effects are random, d_{ji} ~ N(delta_j, omega_j^2),
+        jointly with a_i. The 4-dimensional country integral uses a Laplace
+        approximation. Implies random_intercepts and quarter_dummies.
+        Incompatible with two_step and country_trends.
     """
 
     def __init__(
@@ -679,6 +736,8 @@ class PanelMSAR:
         zero_mu=False,
         min_t=8,
         rho_max=RHO_MAX,
+        quarter_dummies=False,
+        random_seasonals=False,
     ):
         if not isinstance(n_regimes, (int, np.integer)):
             raise TypeError(
@@ -705,6 +764,11 @@ class PanelMSAR:
         self.country_trends = bool(country_trends)
         self.random_intercepts = bool(random_intercepts)
         self.two_step = _parse_two_step(two_step)
+        self.quarter_dummies = bool(quarter_dummies)
+        self.random_seasonals = bool(random_seasonals)
+        if self.random_seasonals:
+            self.random_intercepts = True
+            self.quarter_dummies = True
         if self.random_intercepts and self.two_step:
             raise ValueError("random_intercepts cannot be combined with two_step.")
         if self.random_intercepts and self.country_trends:
@@ -712,6 +776,8 @@ class PanelMSAR:
                 "random_intercepts currently supports a common slope only "
                 "(country_trends=False)."
             )
+        if self.quarter_dummies and self.two_step:
+            raise ValueError("quarter_dummies cannot be combined with two_step.")
         xz, w = np.polynomial.hermite.hermgauss(11)
         self._gh_z = xz * np.sqrt(2.0)
         self._gh_w = w / np.sqrt(np.pi)
@@ -733,6 +799,7 @@ class PanelMSAR:
         self.res_ = None
         self._ols = None
         self._ag_cache = None
+        self._laplace_cache = None
         self._last_mu_shift = 0.0
         self._two_step_a = None
         self._two_step_g = None
@@ -952,10 +1019,20 @@ class PanelMSAR:
             names += ["sigma"]
         if self._outer_has_g():
             names += ["g"]
-        if self.random_intercepts:
-            names += ["alpha", "log_omega"]
-        elif self._outer_has_a():
-            names += ["a"]
+        if self.random_seasonals:
+            names += [
+                "alpha", "log_omega",
+                "dQ2", "log_omega_Q2",
+                "dQ3", "log_omega_Q3",
+                "dQ4", "log_omega_Q4",
+            ]
+        else:
+            if self.quarter_dummies:
+                names += ["dQ2", "dQ3", "dQ4"]
+            if self.random_intercepts:
+                names += ["alpha", "log_omega"]
+            elif self._outer_has_a():
+                names += ["a"]
         return names
 
     def _unpack(self, theta):
@@ -998,21 +1075,41 @@ class PanelMSAR:
             i += 1
         else:
             g = 0.0
+        d = np.zeros(3, dtype=float)
+        omega_d = np.zeros(3, dtype=float)
         omega = 0.0
-        if self.random_intercepts:
+        a = 0.0
+        if self.random_seasonals:
             a = theta[i]
             i += 1
             omega = float(np.exp(np.clip(theta[i], -12.0, 5.0)))
-        elif self._outer_has_a():
-            a = theta[i]
+            i += 1
+            for j in range(3):
+                d[j] = theta[i]
+                i += 1
+                omega_d[j] = float(np.exp(np.clip(theta[i], -12.0, 5.0)))
+                i += 1
         else:
-            a = 0.0
+            if self.quarter_dummies:
+                d = np.asarray(theta[i:i + 3], dtype=float)
+                i += 3
+            if self.random_intercepts:
+                a = theta[i]
+                i += 1
+                omega = float(np.exp(np.clip(theta[i], -12.0, 5.0)))
+            elif self._outer_has_a():
+                a = theta[i]
         return {
             "P": P, "rho": rho, "mu": mu, "sigma": sig, "g": g, "a": a,
             "alpha": a, "omega": omega,
+            "d": d, "dQ2": float(d[0]), "dQ3": float(d[1]), "dQ4": float(d[2]),
+            "omega_d": omega_d,
+            "omega_Q2": float(omega_d[0]),
+            "omega_Q3": float(omega_d[1]),
+            "omega_Q4": float(omega_d[2]),
         }
 
-    def _pack_from_dicts(self, P, rho, mu, sig, g, a, omega=None):
+    def _pack_from_dicts(self, P, rho, mu, sig, g, a, omega=None, d=None, omega_d=None):
         k = self.n_regimes
         logits = np.log(np.clip(P, 1e-12, 1.0))
         raw = logits[:, : k - 1] - logits[:, k - 1][:, None]
@@ -1028,13 +1125,36 @@ class PanelMSAR:
             th += [float(np.log(np.mean(sig)))]
         if self._outer_has_g():
             th += [float(g)]
-        if self.random_intercepts:
+        dd = np.zeros(3, dtype=float) if d is None else np.asarray(d, dtype=float).reshape(-1)
+        if dd.size != 3:
+            dd = np.zeros(3, dtype=float)
+        od = np.full(3, 0.05) if omega_d is None else np.asarray(omega_d, dtype=float).reshape(-1)
+        if od.size != 3:
+            od = np.full(3, 0.05)
+        if self.random_seasonals:
             th += [float(a)]
             om = 0.2 if omega is None else float(omega)
             th += [float(np.log(max(om, 1e-8)))]
-        elif self._outer_has_a():
-            th += [float(a)]
+            for j in range(3):
+                th += [float(dd[j]), float(np.log(max(float(od[j]), 1e-8)))]
+        else:
+            if self.quarter_dummies:
+                th += [float(dd[0]), float(dd[1]), float(dd[2])]
+            if self.random_intercepts:
+                th += [float(a)]
+                om = 0.2 if omega is None else float(omega)
+                th += [float(np.log(max(om, 1e-8)))]
+            elif self._outer_has_a():
+                th += [float(a)]
         return np.asarray(th, dtype=float)
+
+    def _trend(self, a, g, t, d=None):
+        t = np.asarray(t, dtype=float)
+        tr = float(a) + float(g) * t
+        if self.quarter_dummies or self.random_seasonals:
+            dd = np.zeros(3, dtype=float) if d is None else np.asarray(d, dtype=float).reshape(-1)
+            tr = tr + _quarter_dummies(t) @ dd
+        return tr
 
     def _stack_panels(self, panels):
         lengths = np.array([len(y) for y, _ in panels], dtype=np.int64)
@@ -1280,7 +1400,7 @@ class PanelMSAR:
         logc = np.empty(nq)
         for k in range(nq):
             a = alpha + omega * self._gh_z[k]
-            z = y - a - g * t
+            z = y - self._trend(a, g, t, p.get("d"))
             try:
                 ll = _country_ll_nb(z, rho, mu, sig, P, pi0)
             except Exception:
@@ -1317,7 +1437,7 @@ class PanelMSAR:
             sl = slice(int(offsets[i]), int(offsets[i] + lengths[i]))
             logc = np.empty(self._gh_z.size)
             for k in range(self._gh_z.size):
-                z = ycat[sl] - aks[k] - p["g"] * tcat[sl]
+                z = ycat[sl] - self._trend(aks[k], p["g"], tcat[sl], p.get("d"))
                 try:
                     ll = _country_ll_nb(
                         np.ascontiguousarray(z, dtype=np.float64),
@@ -1335,14 +1455,119 @@ class PanelMSAR:
             a_hat[i] = float(np.dot(w, aks))
         return a_hat
 
+    def _ols_ad(self, y, t, g):
+        """OLS a and Q2-Q4 dummies with slope g held fixed."""
+        y = np.asarray(y, dtype=float) - float(g) * np.asarray(t, dtype=float)
+        X = np.column_stack([np.ones(y.size), _quarter_dummies(t)])
+        beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+        x = np.zeros(4)
+        x[: min(4, beta.size)] = beta[:4]
+        return x
+
+    def _laplace_nll_country(self, x, y, t, p, pi0):
+        x = np.asarray(x, dtype=float)
+        z = y - self._trend(x[0], p["g"], t, x[1:4])
+        try:
+            ll = _country_ll_nb(
+                np.ascontiguousarray(z, dtype=np.float64),
+                np.ascontiguousarray(p["rho"], dtype=np.float64),
+                np.ascontiguousarray(p["mu"], dtype=np.float64),
+                np.ascontiguousarray(p["sigma"], dtype=np.float64),
+                np.ascontiguousarray(p["P"], dtype=np.float64),
+                pi0,
+            )
+        except Exception:
+            ll = -1e12
+        if not np.isfinite(ll):
+            ll = -1e12
+        lp = 0.0
+        means = np.array([p["alpha"], p["d"][0], p["d"][1], p["d"][2]], dtype=float)
+        sds = np.array(
+            [max(float(p["omega"]), 1e-8)]
+            + [max(float(p["omega_d"][j]), 1e-8) for j in range(3)],
+            dtype=float,
+        )
+        for j in range(4):
+            lp += -0.5 * LOG2PI - np.log(sds[j]) - 0.5 * ((x[j] - means[j]) / sds[j]) ** 2
+        return -float(ll) - float(lp)
+
+    def _country_ll_laplace(self, y, t, p, pi0, x0=None):
+        y = np.ascontiguousarray(y, dtype=np.float64)
+        t = np.ascontiguousarray(t, dtype=np.float64)
+        if x0 is None:
+            x0 = self._ols_ad(y, t, p["g"])
+        x0 = np.asarray(x0, dtype=float).reshape(4)
+
+        def f(x):
+            return self._laplace_nll_country(x, y, t, p, pi0)
+
+        opt = minimize(f, x0, method="L-BFGS-B", options={"maxiter": 40, "ftol": 1e-7})
+        xstar = np.asarray(opt.x, dtype=float).reshape(4)
+        nll_star = float(opt.fun)
+        if not np.isfinite(nll_star):
+            return -1e12, xstar
+        H = _fd_hess(f, xstar)
+        sign, logdet = np.linalg.slogdet(H)
+        if sign <= 0 or not np.isfinite(logdet):
+            H = H + 1e-3 * np.eye(4)
+            sign, logdet = np.linalg.slogdet(H)
+        if sign <= 0 or not np.isfinite(logdet):
+            return -1e12, xstar
+        ll_int = -nll_star + 2.0 * LOG2PI - 0.5 * float(logdet)
+        if not np.isfinite(ll_int):
+            return -1e12, xstar
+        return float(ll_int), xstar
+
+    def _panel_ll_laplace(self, packed, p):
+        ycat, tcat, lengths, offsets = packed
+        pi0 = _stationary_probs(p["P"]).astype(np.float64)
+        n = int(lengths.shape[0])
+        cache = self._laplace_cache
+        if cache is None or len(cache) != n:
+            cache = [None] * n
+        ll = 0.0
+        new_cache = []
+        for i in range(n):
+            sl = slice(int(offsets[i]), int(offsets[i] + lengths[i]))
+            lli, xstar = self._country_ll_laplace(
+                ycat[sl], tcat[sl], p, pi0, x0=cache[i]
+            )
+            if not np.isfinite(lli):
+                self._laplace_cache = new_cache + cache[i + 1 :]
+                return -1e12
+            ll += lli
+            new_cache.append(xstar)
+        self._laplace_cache = new_cache
+        return ll
+
+    def _re_posterior_ad(self, packed, p):
+        """Laplace posterior modes for (a_i, d2i, d3i, d4i)."""
+        ycat, tcat, lengths, offsets = packed
+        pi0 = _stationary_probs(p["P"]).astype(np.float64)
+        n = int(lengths.shape[0])
+        cache = self._laplace_cache
+        if cache is None or len(cache) != n:
+            cache = [None] * n
+        xs = np.empty((n, 4))
+        for i in range(n):
+            sl = slice(int(offsets[i]), int(offsets[i] + lengths[i]))
+            _, xstar = self._country_ll_laplace(
+                ycat[sl], tcat[sl], p, pi0, x0=cache[i]
+            )
+            xs[i] = xstar
+        self._laplace_cache = [xs[i].copy() for i in range(n)]
+        return xs
+
     def _nll(self, theta, packed):
         ycat, tcat, lengths, offsets = packed
         p = self._unpack(theta)
         pi0 = _stationary_probs(p["P"]).astype(np.float64)
-        if self.random_intercepts:
+        if self.random_seasonals:
+            ll = self._panel_ll_laplace(packed, p)
+        elif self.random_intercepts:
             ll = self._panel_ll_re(packed, p)
         elif not self._do_profile():
-            zcat = ycat - p["a"] - p["g"] * tcat
+            zcat = ycat - self._trend(p["a"], p["g"], tcat, p.get("d"))
             ll = _panel_ll_nb(
                 zcat, lengths, offsets,
                 np.ascontiguousarray(p["rho"], dtype=np.float64),
@@ -1360,19 +1585,26 @@ class PanelMSAR:
     def _starting_values(self, panels, n_starts, rng):
         ys = np.concatenate([y for y, _ in panels])
         ts = np.concatenate([t for _, t in panels])
-        X = np.column_stack([np.ones(len(ys)), ts])
-        beta, *_ = np.linalg.lstsq(X, ys, rcond=None)
-        a0, g0 = float(beta[0]), float(beta[1])
+        if self.quarter_dummies or self.random_seasonals:
+            X = np.column_stack([np.ones(len(ys)), ts, _quarter_dummies(ts)])
+            beta, *_ = np.linalg.lstsq(X, ys, rcond=None)
+            a0, g0 = float(beta[0]), float(beta[1])
+            d0 = np.asarray(beta[2:5], dtype=float)
+        else:
+            X = np.column_stack([np.ones(len(ys)), ts])
+            beta, *_ = np.linalg.lstsq(X, ys, rcond=None)
+            a0, g0 = float(beta[0]), float(beta[1])
+            d0 = np.zeros(3, dtype=float)
         if self.country_intercepts or self.country_trends or self.random_intercepts:
             pieces = []
             for y, t in panels:
                 ai, gi = self._ols_ag(y, t)
                 a_use = ai if (self.country_intercepts or self.random_intercepts) else a0
                 g_use = gi if self.country_trends else g0
-                pieces.append(y - a_use - g_use * t)
+                pieces.append(y - self._trend(a_use, g_use, t, d0))
             resid = np.concatenate(pieces)
         else:
-            resid = ys - a0 - g0 * ts
+            resid = ys - self._trend(a0, g0, ts, d0)
         s_hat = float(np.std(resid, ddof=1)) or 0.05
 
         rhos = []
@@ -1380,7 +1612,7 @@ class PanelMSAR:
             ai, gi = self._ols_ag(y, t)
             a_use = ai if self.country_intercepts else a0
             g_use = gi if self.country_trends else g0
-            z = y - a_use - g_use * t
+            z = y - self._trend(a_use, g_use, t, d0)
             if z.size < 4:
                 continue
             zc = z - z.mean()
@@ -1412,16 +1644,26 @@ class PanelMSAR:
             return mu
 
         omega0 = 0.2
+        omega_d0 = np.full(3, 0.05)
         if self.random_intercepts:
             ais = [self._ols_ag(y, t)[0] for y, t in panels]
             a0 = float(np.mean(ais))
             omega0 = float(np.std(ais, ddof=1) or 0.3)
+        if self.random_seasonals:
+            ds = []
+            for y, t in panels:
+                ds.append(self._ols_ad(y, t, g0)[1:])
+            ds = np.vstack(ds)
+            d0 = np.mean(ds, axis=0)
+            omega_d0 = np.std(ds, axis=0, ddof=1)
+            omega_d0 = np.where(np.isfinite(omega_d0) & (omega_d0 > 1e-4), omega_d0, 0.05)
 
         def one(g, a, rho, mu_spread, sigs, P, jitter=0.0, omega=None):
             mu = np.zeros(k) if self.zero_mu else spread_mu(mu_spread)
             om = omega0 if omega is None else omega
             th = self._pack_from_dicts(
-                P, np.full(k, rho), mu, np.asarray(sigs, float), g, a, omega=om,
+                P, np.full(k, rho), mu, np.asarray(sigs, float), g, a,
+                omega=om, d=d0, omega_d=omega_d0,
             )
             if jitter:
                 th = th + rng.normal(0.0, jitter, size=th.shape)
@@ -1473,6 +1715,7 @@ class PanelMSAR:
             self._last_mu_shift = 0.0
             return self._pack_from_dicts(
                 P, rho, mu, sig, p["g"], p["a"], omega=p.get("omega"),
+                d=p.get("d"), omega_d=p.get("omega_d"),
             )
         order = np.argsort(p["mu"])
         mu = p["mu"][order]
@@ -1488,6 +1731,7 @@ class PanelMSAR:
         self._last_mu_shift = shift
         return self._pack_from_dicts(
             P, rho, mu, sig, g, a, omega=p.get("omega"),
+            d=p.get("d"), omega_d=p.get("omega_d"),
         )
 
     def _se_P(self, P, cov):
@@ -1532,6 +1776,16 @@ class PanelMSAR:
             out["alpha"] = raw["alpha"]
         if "log_omega" in raw:
             out["omega"] = raw["log_omega"] * float(p.get("omega", 0.0))
+        for name in ("dQ2", "dQ3", "dQ4"):
+            if name in raw:
+                out[name] = raw[name]
+        for raw_n, out_n, key in (
+            ("log_omega_Q2", "omega_Q2", "omega_Q2"),
+            ("log_omega_Q3", "omega_Q3", "omega_Q3"),
+            ("log_omega_Q4", "omega_Q4", "omega_Q4"),
+        ):
+            if raw_n in raw:
+                out[out_n] = raw[raw_n] * float(p.get(key, 0.0))
 
         cap = float(self.rho_max)
         if not self.common_rho:
@@ -1667,6 +1921,7 @@ class PanelMSAR:
             # park the 1-D Brent window around a crazy intercept (~1000)
             # and the next start never recovers.
             self._ag_cache = None
+            self._laplace_cache = None
             opt = minimize(
                 self._nll,
                 th0,
@@ -1697,6 +1952,7 @@ class PanelMSAR:
 
         best = self._order_regimes(best)
         self._ag_cache = None
+        self._laplace_cache = None
         opt = minimize(
             self._nll,
             best,
@@ -1723,14 +1979,23 @@ class PanelMSAR:
         names = self.param_names()
         ll = -best_fun
         n_c = len(orig_panels)
+        d_hat = None
         if self._do_profile():
             self._ag_cache = None
+            self._laplace_cache = None
             ll_prof, a_hat, g_hat, p = self._profile_all(best, packed)
             if np.isfinite(ll_prof):
                 ll = float(ll_prof)
             h_hat = np.zeros(n_c)
+        elif self.random_seasonals:
+            ad = self._re_posterior_ad(packed, p)
+            a_hat = ad[:, 0]
+            d_hat = ad[:, 1:4]
+            g_hat = np.full(n_c, float(p["g"]))
+            h_hat = np.zeros(n_c)
         elif self.random_intercepts:
             a_hat = self._re_posterior_a(packed, p)
+            d_hat = None
             g_hat = np.full(n_c, float(p["g"]))
             h_hat = np.zeros(n_c)
         elif self.two_step == "cf":
@@ -1783,8 +2048,11 @@ class PanelMSAR:
             for i, (cid, (yy, tt)) in enumerate(zip(ids, orig_panels)):
                 if self.two_step == "cf":
                     z = self._two_step_z[i] - self._last_mu_shift
+                elif self.random_seasonals:
+                    z = yy - self._trend(a_hat[i], g_hat[i], tt, d_hat[i])
                 else:
-                    z = yy - a_hat[i] - g_hat[i] * tt - h_hat[i] * tt * tt
+                    z = yy - self._trend(a_hat[i], g_hat[i], tt, p.get("d"))
+                    z = z - h_hat[i] * tt * tt
                 _, filt = _country_loglik(
                     z, p["rho"], p["mu"], p["sigma"], p["P"], pi0, return_filter=True
                 )
@@ -1821,6 +2089,19 @@ class PanelMSAR:
         if self.random_intercepts:
             params["alpha"] = float(p["alpha"])
             params["omega"] = float(p["omega"])
+        if self.quarter_dummies or self.random_seasonals:
+            params["dQ2"] = float(p["dQ2"])
+            params["dQ3"] = float(p["dQ3"])
+            params["dQ4"] = float(p["dQ4"])
+            params["d"] = np.asarray(p["d"], dtype=float)
+        if self.random_seasonals:
+            params["omega_Q2"] = float(p["omega_Q2"])
+            params["omega_Q3"] = float(p["omega_Q3"])
+            params["omega_Q4"] = float(p["omega_Q4"])
+            if d_hat is not None:
+                params["dQ2_i"] = {cid: float(d_hat[i, 0]) for i, cid in enumerate(ids)}
+                params["dQ3_i"] = {cid: float(d_hat[i, 1]) for i, cid in enumerate(ids)}
+                params["dQ4_i"] = {cid: float(d_hat[i, 2]) for i, cid in enumerate(ids)}
         if se_params is not None and cov is not None:
             def _pi_ez(th):
                 pp = self._unpack(th)
@@ -1872,6 +2153,8 @@ class PanelMSAR:
             cf_high=float(self._cf_high) if self._cf_high is not None else 0.0,
             zero_mu=self.zero_mu,
             random_intercepts=self.random_intercepts,
+            quarter_dummies=self.quarter_dummies,
+            random_seasonals=self.random_seasonals,
             rho_max=self.rho_max,
         )
         if detrend_pdf:
@@ -1949,6 +2232,7 @@ class PanelMSAR:
             packed = self._stack_panels(boot)
             self._ols = [self._ols_ag(yy, tt) for yy, tt in boot]
             self._ag_cache = None
+            self._laplace_cache = None
             opt = minimize(
                 self._nll,
                 theta,
