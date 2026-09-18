@@ -10,13 +10,11 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-SOE = ROOT / "soe_sample"
 CSV = HERE / "realGDP_sa_empl.csv"
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(SOE))
 
 from panel_msar import PanelMSAR
-from run_soe_spec_report import compile_tex, save_cycle_pdf, _tabular, _trend_note
+from msar_report import compile_tex, save_cycle_pdf, _tabular, _trend_note
 
 OUT_PDF = HERE / "msar_re.pdf"
 TEX = HERE / "msar_re.tex"
@@ -28,13 +26,11 @@ SPECS = [
     dict(
         key="common_ag",
         title="Common intercept and linear trend",
-        country_intercepts=False,
         random_intercepts=False,
     ),
     dict(
         key="re_ai",
         title="Random-effects intercepts, common linear trend",
-        country_intercepts=False,
         random_intercepts=True,
     ),
 ]
@@ -125,7 +121,7 @@ def _tex_report(sample_line, fitted):
         r"(period-average USD) from the 2026-09-17 quarterly panel. "
         r"Calendar time is taken from the period stamp $t$ (year-fraction). "
         r"The trend is linear in calendar time $t$ ($g$ per year, common across countries). "
-        r"No quarterly dummies (the GDP series is already seasonally adjusted). "
+        r"The GDP series is already seasonally adjusted. "
         r"In the pooled specification $a_i\equiv a$. In the random-effects specification "
         r"the $a_i$ are i.i.d.\ Normal draws; $\alpha$ and $\omega$ are estimated by "
         r"maximum likelihood, integrating each country's Hamilton-filter likelihood "
@@ -181,16 +177,10 @@ def fit_spec(df, spec, verbose=True):
         n_regimes=3,
         common_rho=False,
         common_sigma=False,
-        country_intercepts=spec["country_intercepts"],
-        country_trends=False,
         random_intercepts=spec["random_intercepts"],
-        two_step=False,
         zero_mu=False,
         min_t=12,
         rho_max=0.99,
-        quarter_dummies=False,
-        random_seasonals=False,
-        re_family="normal",
     )
     res = mod.fit(
         df["country"],

@@ -28,9 +28,8 @@ New constructor flag: `convergence=False`.
 
 When `convergence=True`:
 
-- Force `random_intercepts=True`, `re_family="normal"`.
-- Reject `two_step`, `country_trends`, `random_seasonals`, `re_family="pareto"`.
-- `quarter_dummies` remains allowed (common Q2–Q4 on the trend, not on the gap). Not needed for the SA 2026-09-17 file.
+- Force `random_intercepts=True`.
+- Common \(g\); no extra seasonal terms.
 
 Default `convergence=False` leaves every existing report unchanged.
 
@@ -46,9 +45,9 @@ Add to the outer θ (after `g`, alongside current RE names):
 
 Drop the current RE mean `alpha` as a *mean of intercepts*. Under this spec the GH mean of \(b_i\) is **zero**; the location is entirely \(\bar a\).
 
-`param_names` when `convergence` (and not `random_seasonals`):
+`param_names` when `convergence`:
 
-`[P slots, rho, mu, sigma, g, (dQ2,dQ3,dQ4 if quarter_dummies), a_bar, log_omega, logit_lambda]`
+`[P slots, rho, mu, sigma, g, a_bar, log_omega, logit_lambda]`
 
 Mu-pin shift (ordering regimes) is absorbed into \(\bar a\), as it is now absorbed into `a` / `alpha`.
 
@@ -59,7 +58,7 @@ Packed data already has per-country slices. Entry time is `tcat[offsets[i]]` (fi
 For GH node \(\ell\), \(b^{(\ell)}=\omega_b z_\ell^{\mathrm{GH}}\) (mean 0):
 
 \[
-z_{it}^{(\ell)} = y_{it} - \bar a - g t_{it} - b^{(\ell)}\,\lambda^{t-T_{i0}} - d'Q_t.
+z_{it}^{(\ell)} = y_{it} - \bar a - g t_{it} - b^{(\ell)}\,\lambda^{t-T_{i0}}.
 \]
 
 Then the usual Hamilton-filter country ll, weighted by GH weights, `logsumexp` as in `_country_ll_re`.
@@ -67,7 +66,7 @@ Then the usual Hamilton-filter country ll, weighted by GH weights, `logsumexp` a
 Implement by generalizing `_trend` (or a sibling `_mean_path`) to
 
 ```text
-abar + g*t + b * lambda**(t - T_i0) + D @ d
+abar + g*t + b * lambda**(t - T_i0)
 ```
 
 with `b=0` when `convergence` is off (current intercept-in-`a` path). When `convergence` is off, keep today’s `a + g t` so old results do not change.
@@ -80,7 +79,7 @@ Reuse the GH softmax in `_re_posterior_a`, but the node values are \(b^{(k)}\) n
 
 - `params["a_bar"]`, `params["lambda"]`, `params["omega"]`
 - `a_out[i] = a_bar + b_hat[i]` only as a convenience “entry intercept”; also store `b_hat[i]`
-- cycles: \(z_{it}=y_{it}-\bar a-g t-b_i\lambda^{t-T_{i0}}-d'Q_t\)
+- cycles: \(z_{it}=y_{it}-\bar a-g t-b_i\lambda^{t-T_{i0}}\)
 
 Plot the **cycle** as now, and optionally the deterministic path \(\bar a+gt+b_i\lambda^{t-T_{i0}}\) (not required for the first report).
 
@@ -100,14 +99,14 @@ If a start wants \(\lambda\to 1\), logit \(\to+\infty\); clip logit to something
 
 - Hessian on unconstrained θ, including `logit_lambda`.
 - Report \(\lambda\) with delta-method SE: \(\mathrm{se}(\lambda)=\mathrm{se}(u)\cdot\lambda(1-\lambda)\).
-- `summary` / `_trend_note`: \(\bar a\), \(g\), \(\lambda\), \(\omega_b\), and (if on) the Q dummies.
+- `summary` / `_trend_note`: \(\bar a\), \(g\), \(\lambda\), \(\omega_b\).
 - Warn if \(\hat\lambda>0.995\) (“indistinguishable from RE intercepts”) or if \(\hat\lambda<0.5\) (“near-immediate jump to the common path”).
 
 ## First empirical run
 
 After the code path is in `panel_msar.py` and `_trend_note`:
 
-- Data: `data_2026.09.17` (SA, `realGDPsa_usd_pa_empl`), full sample, `rho_max=0.99`, 3 starts, **no** quarter dummies.
+- Data: `data_2026.09.17` (SA, `realGDPsa_usd_pa_empl`), full sample, `rho_max=0.99`, 3 starts.
 - Two or three columns in one PDF:
   1. Current Normal RE intercepts (baseline, already running / already in that folder).
   2. This spec (common λ).
@@ -119,7 +118,7 @@ Compare: log-likelihood vs RE intercepts; \(\hat\lambda\); whether quiet-regime 
 
 - Random \(\lambda_i\) (2D GH).
 - Permanent \(a_i\) *plus* \(b_i\lambda^{t-T_{i0}}\).
-- Pareto / Laplace seasonals / FE intercepts.
+- Permanent FE intercepts or extra seasonal terms.
 - Treating \(\lambda=1\) as an interior H0 for a standard LR test.
 - Changing `_prepare` time origin or `min_t`.
 
