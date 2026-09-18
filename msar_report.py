@@ -149,7 +149,30 @@ def _trend_note(res):
     se = res.se_params or {}
     bits = []
     a, g = pr.get("a"), pr.get("g")
-    if getattr(res, "random_intercepts", False):
+    if getattr(res, "convergence", False):
+        abar = pr.get("a_bar")
+        lam = pr.get("lambda")
+        om = pr.get("omega")
+        sa = se.get("a_bar")
+        sl = se.get("lambda")
+        so = se.get("omega")
+        extra_a = f" ({float(sa):.4f})" if sa is not None and np.isfinite(float(sa)) else ""
+        extra_l = f" ({float(sl):.4f})" if sl is not None and np.isfinite(float(sl)) else ""
+        extra_o = f" ({float(so):.4f})" if so is not None and np.isfinite(float(so)) else ""
+        bits.append(
+            rf"Common catch-up $y_{{it}}=\bar a + g t + b_i\lambda^{{t-T_{{i0}}}}+z_{{it}}$ "
+            rf"with $\bar a={float(abar):.4f}${extra_a}, "
+            rf"$\lambda={float(lam):.4f}${extra_l}, "
+            rf"$\omega_b={float(om):.4f}${extra_o}."
+        )
+        bb = pr.get("b")
+        if isinstance(bb, dict) and bb:
+            bv = np.array(list(bb.values()), dtype=float)
+            bits.append(
+                rf"Posterior-mean $b_i$: mean {bv.mean():.3f}, "
+                rf"min {bv.min():.3f}, max {bv.max():.3f}."
+            )
+    elif getattr(res, "random_intercepts", False):
         al, om = pr.get("alpha"), pr.get("omega")
         sa = se.get("alpha")
         so = se.get("omega")

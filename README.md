@@ -12,7 +12,7 @@ s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}).
 \end{aligned}
 $$
 
-With `random_intercepts=True`, \(a\) is replaced by \(a_i\sim N(\alpha,\omega^2)\). The slope \(g\) is always common.
+With `random_intercepts=True`, \(a\) is replaced by \(a_i\sim N(\alpha,\omega^2)\). With `convergence=True`, the permanent intercept is replaced by a decaying gap \(b_i\lambda^{t-T_{i0}}\) (\(b_i\sim N(0,\omega_b^2)\), \(0<\lambda<1\) common; \(T_{i0}\) is country \(i\)'s first observation). The slope \(g\) is always common. `convergence=True` forces random intercepts.
 
 Countries are independent given shared \(\theta\). Likelihood: Hamilton filter per country, sum log-likelihoods. Random intercepts are integrated with 11-point Gauss–Hermite quadrature.
 
@@ -22,6 +22,7 @@ Countries are independent given shared \(\theta\). Likelihood: Hamilton filter p
 | Trend | Common intercept \(a\) and common slope \(g\). \(g\) is per unit of calendar time; \(\rho\) is per observation. |
 | Time \(t\) | Calendar time, **common origin** for every country. Any regular frequency. |
 | Random intercepts | Off by default. If on, \(a_i\sim N(\alpha,\omega^2)\); \(\alpha\) and \(\omega\) are MLE parameters. Cycles use posterior-mean \(a_i\). |
+| Catch-up | Off by default (`convergence=False`). If on, \(y_{it}=\bar a + g t + b_i\lambda^{t-T_{i0}}+z_{it}\). |
 | Regimes \(k\) | Odd (\(1, 3, 5, \ldots\)) so a unique median regime exists. \(k\) is specified, not selected. |
 | Mean restriction | After estimation, regimes are ordered by \(\mu\) and shifted so \(\mu_{\lfloor k/2\rfloor}=0\). The shift is absorbed into \(a\) (or \(\alpha\)). Set `zero_mu=True` to restrict **every** \(\mu(s)=0\); regimes are then ordered by \(\sigma\) (or \(\rho\) if \(\sigma\) is common). |
 | Persistence | One \(\rho\) for all regimes (`common_rho=True`) or switching \(\rho(s)\). |
@@ -59,11 +60,12 @@ from panel_msar import PanelMSAR
 
 mod = PanelMSAR(
     n_regimes=3, common_rho=True, common_sigma=False,
-    random_intercepts=False, zero_mu=False, min_t=12, rho_max=0.99,
+    random_intercepts=False, convergence=False,
+    zero_mu=False, min_t=12, rho_max=0.99,
 )
 res = mod.fit(
     df["country"], df["time"], df["y"],
-    n_starts=8, maxiter=400, detrend_pdf="cycle.pdf",
+    n_starts=7, maxiter=400, detrend_pdf="cycle.pdf",
 )
 print(res)                 # a, g, rho, regime table, Pi; SEs in parentheses underneath
 res.params                 # a, g, rho, mu, sigma, P (and alpha, omega if RE)

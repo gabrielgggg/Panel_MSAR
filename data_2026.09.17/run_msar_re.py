@@ -1,4 +1,4 @@
-"""Common linear trend + RE intercepts on 2026-09-17 SA real GDP per worker."""
+"""Common trend, RE intercepts, and common-λ catch-up on 2026-09-17 SA GDP."""
 from __future__ import annotations
 
 import re
@@ -22,18 +22,19 @@ FIGS = HERE / "figs"
 SAMPLE_CSV = HERE / "estimation_sample.csv"
 YCOL = "realGDPsa_usd_pa_empl"
 
-SPECS = [
-    dict(
-        key="common_ag",
-        title="Common intercept and linear trend",
-        random_intercepts=False,
-    ),
-    dict(
-        key="re_ai",
-        title="Random-effects intercepts, common linear trend",
-        random_intercepts=True,
-    ),
+# Specs 1–2 were already estimated; keep those sections and cycle PDFs.
+# This runner only fits spec 3 (common-λ catch-up).
+SPECS_FROZEN = [
+    dict(key="common_ag", title="Common intercept and linear trend"),
+    dict(key="re_ai", title="Random-effects intercepts, common linear trend"),
 ]
+SPEC_LAMBDA = dict(
+    key="lambda",
+    title="Common-lambda catch-up around the global trend",
+    random_intercepts=True,
+    convergence=True,
+)
+FROZEN_12 = HERE / "msar_re_specs12.tex"
 
 
 def load_panel(path: Path | None = None) -> pd.DataFrame:
@@ -92,8 +93,8 @@ def load_panel(path: Path | None = None) -> pd.DataFrame:
     return df.loc[:, keep]
 
 
-def _tex_report(sample_line, fitted):
-    parts = [
+def _tex_preamble():
+    return [
         r"\documentclass[11pt]{article}",
         r"\usepackage[margin=1in]{geometry}",
         r"\usepackage{amsmath,amssymb,booktabs,graphicx,setspace,caption,hyperref}",
@@ -102,7 +103,7 @@ def _tex_report(sample_line, fitted):
         r"\setlength{\parindent}{0pt}",
         r"\setlength{\parskip}{0.6em}",
         r"\captionsetup{font=small,skip=6pt}",
-        r"\title{Panel MS-AR(1) with random-effects intercepts, full sample\\[0.4em]"
+        r"\title{Panel MS-AR(1): common trend, random intercepts, catch-up\\[0.4em]"
         r"\large Seasonally adjusted real GDP per worker (period-average USD)}",
         r"\author{}",
         r"\date{}",
@@ -110,23 +111,27 @@ def _tex_report(sample_line, fitted):
         r"\maketitle",
         r"\section{Model}",
         r"Joint panel Markov-switching AR(1) around a \emph{linear} trend, "
-        r"with three regimes:",
+        r"with three regimes. The pooled and random-effects specifications are",
         r"\begin{align}",
         r"y_{it} &= a_i + g\, t + z_{it}, \\",
         r"z_{i,t+1} &= \bigl(1-\rho(s_{it})\bigr)\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}, \\",
-        r"s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}), \\",
-        r"a_i &\sim \mathcal{N}(\alpha,\omega^2) \quad \text{(random effects)}.",
+        r"s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}).",
         r"\end{align}",
+        r"In the pooled specification $a_i\equiv a$. In the random-effects specification "
+        r"$a_i\sim\mathcal{N}(\alpha,\omega^2)$; $\alpha$ and $\omega$ are estimated by "
+        r"maximum likelihood, integrating each country's Hamilton-filter likelihood "
+        r"by 11-point Gauss--Hermite quadrature. Cycles then use the posterior mean of $a_i$. "
+        r"The third specification replaces a permanent intercept with a decaying gap",
+        r"\begin{align}",
+        r"y_{it} &= \bar a + g\, t + b_i\,\lambda^{t-T_{i0}} + z_{it}, \\",
+        r"b_i &\sim \mathcal{N}(0,\omega_b^2),\qquad 0<\lambda<1.",
+        r"\end{align}",
+        r"$T_{i0}$ is country $i$'s first observation. $\lambda=1$ recovers the "
+        r"random-effects intercept model (on the boundary of $(0,1)$). "
         r"The outcome is log seasonally adjusted real GDP per worker "
         r"(period-average USD) from the 2026-09-17 quarterly panel. "
         r"Calendar time is taken from the period stamp $t$ (year-fraction). "
-        r"The trend is linear in calendar time $t$ ($g$ per year, common across countries). "
-        r"The GDP series is already seasonally adjusted. "
-        r"In the pooled specification $a_i\equiv a$. In the random-effects specification "
-        r"the $a_i$ are i.i.d.\ Normal draws; $\alpha$ and $\omega$ are estimated by "
-        r"maximum likelihood, integrating each country's Hamilton-filter likelihood "
-        r"by 11-point Gauss--Hermite quadrature. Cycles are plotted using the "
-        r"posterior mean of $a_i$. "
+        r"$g$ is per year and common. "
         r"Latent paths $s_{it}$ are country-specific. The regime dated $t$ governs "
         r"the transition from $z_t$ to $z_{t+1}$. $\sigma$ and $\rho$ switch with the "
         r"regime. The median $\mu$ is pinned at 0. $|\rho|<0.99$.",
@@ -134,37 +139,47 @@ def _tex_report(sample_line, fitted):
         r"on shared parameters. $\pi$ is the ergodic distribution of $\Pi$. "
         r"$E[z]$ is the long-run mean of the cycle implied by $\mu$, $\rho$, and $\Pi$.",
     ]
+
+
+def _tex_spec_section(sample_line, spec, res, fig):
+    se_note = ""
+    if res.se_params is None:
+        se_note = " Standard errors omitted."
+    ez = res.params.get("Ez")
+    se = res.se_params or {}
+    se_ez = se.get("Ez")
+    ez_line = ""
+    if ez is not None and np.isfinite(ez):
+        extra = ""
+        if se_ez is not None and np.isfinite(float(se_ez)):
+            extra = f" ({float(se_ez):.4f})"
+        ez_line = rf" Ergodic mean of the cycle $E[z]={float(ez):.4f}${extra}."
+    return [
+        r"\clearpage",
+        rf"\section{{{spec['title']}}}",
+        sample_line + rf" Fitted countries: {res.n_countries}. "
+        rf"Observations: {res.nobs}. Log-likelihood: {res.loglik:.2f}."
+        + se_note + ez_line,
+        _trend_note(res),
+        r"\begin{table}[h]",
+        r"\centering",
+        r"\caption{Regime AR(1), transition matrix, and ergodic $\pi$. Columns are regimes.}",
+        _tabular(res),
+        r"\end{table}",
+        r"\begin{figure}[h]",
+        r"\centering",
+        rf"\includegraphics[width=0.75\textwidth]{{{fig.as_posix()}}}",
+        r"\caption{Country cycles after removing the deterministic path.}",
+        r"\end{figure}",
+    ]
+
+
+def _tex_report(sample_line, fitted):
+    parts = _tex_preamble()
+    if FROZEN_12.exists():
+        parts.append(FROZEN_12.read_text(encoding="utf-8").rstrip())
     for spec, res, fig in fitted:
-        se_note = ""
-        if res.se_params is None:
-            se_note = " Standard errors omitted."
-        ez = res.params.get("Ez")
-        se = res.se_params or {}
-        se_ez = se.get("Ez")
-        ez_line = ""
-        if ez is not None and np.isfinite(ez):
-            extra = ""
-            if se_ez is not None and np.isfinite(float(se_ez)):
-                extra = f" ({float(se_ez):.4f})"
-            ez_line = rf" Ergodic mean of the cycle $E[z]={float(ez):.4f}${extra}."
-        parts += [
-            r"\clearpage",
-            rf"\section{{{spec['title']}}}",
-            sample_line + rf" Fitted countries: {res.n_countries}. "
-            rf"Observations: {res.nobs}. Log-likelihood: {res.loglik:.2f}."
-            + se_note + ez_line,
-            _trend_note(res),
-            r"\begin{table}[h]",
-            r"\centering",
-            r"\caption{Regime AR(1), transition matrix, and ergodic $\pi$. Columns are regimes.}",
-            _tabular(res),
-            r"\end{table}",
-            r"\begin{figure}[h]",
-            r"\centering",
-            rf"\includegraphics[width=0.75\textwidth]{{{fig.as_posix()}}}",
-            r"\caption{Country cycles after removing the linear trend.}",
-            r"\end{figure}",
-        ]
+        parts += _tex_spec_section(sample_line, spec, res, fig)
     parts.append(r"\end{document}")
     return "\n".join(parts) + "\n"
 
@@ -178,6 +193,7 @@ def fit_spec(df, spec, verbose=True):
         common_rho=False,
         common_sigma=False,
         random_intercepts=spec["random_intercepts"],
+        convergence=spec.get("convergence", False),
         zero_mu=False,
         min_t=12,
         rho_max=0.99,
@@ -186,7 +202,7 @@ def fit_spec(df, spec, verbose=True):
         df["country"],
         df["time"],
         df["y"],
-        n_starts=3,
+        n_starts=7,
         maxiter=400,
         seed=1,
         compute_se=True,
@@ -199,23 +215,30 @@ def fit_spec(df, spec, verbose=True):
 
 def main():
     df = load_panel()
-    df.to_csv(SAMPLE_CSV, index=False)
+    if not SAMPLE_CSV.exists():
+        df.to_csv(SAMPLE_CSV, index=False)
+        print(f"Wrote {SAMPLE_CSV}", flush=True)
     sample_line = (
         rf"2026-09-17 SA panel, full sample: log real GDP per worker. "
         rf"{df.country.nunique()} countries, {len(df)} observations, "
         rf"{df.period.min()}--{df.period.max()}."
     )
     print(sample_line, flush=True)
-    print(f"Wrote {SAMPLE_CSV}", flush=True)
+    if not FROZEN_12.exists():
+        raise FileNotFoundError(
+            f"{FROZEN_12} is missing. Specs 1–2 live there; this runner "
+            "only estimates the common-λ spec."
+        )
     FIGS.mkdir(exist_ok=True)
-    fitted = []
-    for spec in SPECS:
-        res = fit_spec(df, spec)
-        fig = FIGS / f"cycle_{spec['key']}.pdf"
-        save_cycle_pdf(res, fig, spec["title"])
-        rel = fig.relative_to(HERE).as_posix()
-        fitted.append((spec, res, Path(rel)))
-    TEX.write_text(_tex_report(sample_line, fitted), encoding="utf-8")
+    spec = SPEC_LAMBDA
+    res = fit_spec(df, spec)
+    fig = FIGS / f"cycle_{spec['key']}.pdf"
+    save_cycle_pdf(res, fig, spec["title"])
+    rel = fig.relative_to(HERE).as_posix()
+    TEX.write_text(
+        _tex_report(sample_line, [(spec, res, Path(rel))]),
+        encoding="utf-8",
+    )
     compile_tex(TEX)
     print(f"\nWrote {OUT_PDF}", flush=True)
 

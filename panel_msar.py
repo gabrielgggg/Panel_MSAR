@@ -12,9 +12,11 @@ n_regimes must be odd so a unique median regime exists. After estimation,
 regimes are ordered by mean and shifted so mu[k//2] = 0 (the shift is
 absorbed into a), unless zero_mu=True, in which case every
 mu is restricted to 0 and regimes are ordered by sigma (or rho).
-Optional random intercepts a_i ~ N(alpha, omega^2). Countries are
-independent given shared parameters; latent regimes are country-specific.
-The panel may be unbalanced.
+Optional random intercepts a_i ~ N(alpha, omega^2). Optional common-λ
+catch-up: y_it = a_bar + g t + b_i * λ^{t-T_i0} + z_it, with
+b_i ~ N(0, omega^2) and 0 < λ < 1. Countries are independent given
+shared parameters; latent regimes are country-specific. The panel may
+be unbalanced.
 
 Timing: the regime dated t governs the transition from z_t to z_{t+1};
 then a new regime is drawn.
@@ -27,8 +29,10 @@ time variable (per year if time is 1970.0, 1970.25, ...).
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Optional
+import os
 
 import numpy as np
 import pandas as pd
@@ -63,6 +67,20 @@ def _u_from_rho(r, rho_max=RHO_MAX):
     cap = float(rho_max)
     x = np.clip(np.asarray(r, dtype=float) / cap, -0.999999, 0.999999)
     return np.arctanh(x)
+
+
+LOGIT_LAMBDA_MAX = 20.0
+
+
+def _lam_from_u(u):
+    u = float(np.clip(u, -LOGIT_LAMBDA_MAX, LOGIT_LAMBDA_MAX))
+    return float(1.0 / (1.0 + np.exp(-u)))
+
+
+def _u_from_lam(lam):
+    lam = float(np.clip(lam, 1e-12, 1.0 - 1e-12))
+    u = np.log(lam / (1.0 - lam))
+    return float(np.clip(u, -LOGIT_LAMBDA_MAX, LOGIT_LAMBDA_MAX))
 
 
 def _softmax_rows(logits):
@@ -355,6 +373,7 @@ class PanelMSARResults:
     common_sigma: bool = False
     zero_mu: bool = False
     random_intercepts: bool = False
+    convergence: bool = False
     rho_max: float = 0.995
 
     def summary(self) -> str:
@@ -412,7 +431,30 @@ class PanelMSARResults:
             lines.append(
                 f"Regimes ordered by mu; median regime {mid} has mu pinned at 0."
             )
-        if self.random_intercepts:
+        if getattr(self, "convergence", False):
+            abar = float(pr.get("a_bar", pr.get("a", 0.0)))
+            om = float(pr.get("omega", 0.0))
+            lam = float(pr.get("lambda", 1.0))
+            se_ab = se.get("a_bar") if have_se else None
+            se_om = se.get("omega") if have_se else None
+            se_lam = se.get("lambda") if have_se else None
+            lines.append(f"{'a_bar':<{lab}}{_cell_est(abar, W)}")
+            if have_se:
+                lines.append(f"{'':<{lab}}{_cell_se(se_ab, W)}")
+            lines.append(f"{'lambda':<{lab}}{_cell_est(lam, W)}")
+            if have_se:
+                lines.append(f"{'':<{lab}}{_cell_se(se_lam, W)}")
+            lines.append(f"{'omega_b':<{lab}}{_cell_est(om, W)}")
+            if have_se:
+                lines.append(f"{'':<{lab}}{_cell_se(se_om, W)}")
+            bb = pr.get("b")
+            if isinstance(bb, dict) and bb:
+                bv = np.array(list(bb.values()), dtype=float)
+                lines.append(
+                    f"{'b (post. mean)':<{lab}}mean={bv.mean():.4f}  "
+                    f"min={bv.min():.4f}  max={bv.max():.4f}"
+                )
+        elif self.random_intercepts:
             al = float(pr.get("alpha", 0.0))
             om = float(pr.get("omega", 0.0))
             se_al = se.get("alpha") if have_se else None
@@ -530,7 +572,9 @@ class PanelMSARResults:
         ax.set_xlabel("Year")
         ax.set_ylabel("cycle (trend removed)")
         if title is None:
-            if self.random_intercepts:
+            if getattr(self, "convergence", False):
+                title = "Detrended series (common λ catch-up, common g)"
+            elif self.random_intercepts:
                 title = "Detrended series (RE intercepts, common g)"
             else:
                 title = "Detrended series (common a, common g)"
@@ -566,6 +610,11 @@ class PanelMSAR:
         are estimated by MLE; the country likelihood integrates a_i with
         Gauss-Hermite quadrature. Posterior-mean a_i are stored for cycles.
         If False (default), one common intercept a.
+    convergence : bool
+        If True, replace permanent intercepts with a decaying gap
+        b_i * λ^{t-T_i0}, b_i ~ N(0, omega^2), 0 < λ < 1 common.
+        Forces random_intercepts. T_i0 is country i's first observation
+        after sample filters (internal time).
     zero_mu : bool
         If True, every regime mean is restricted to 0 (no free mu in
         the outer parameter vector). Regimes are then labeled by
@@ -586,6 +635,7 @@ class PanelMSAR:
         common_rho=True,
         common_sigma=False,
         random_intercepts=False,
+        convergence=False,
         zero_mu=False,
         min_t=8,
         rho_max=RHO_MAX,
@@ -611,7 +661,8 @@ class PanelMSAR:
         self.n_regimes = int(n_regimes)
         self.common_rho = bool(common_rho)
         self.common_sigma = bool(common_sigma)
-        self.random_intercepts = bool(random_intercepts)
+        self.convergence = bool(convergence)
+        self.random_intercepts = bool(random_intercepts) or self.convergence
         xz, w = np.polynomial.hermite.hermgauss(11)
         self._gh_z = xz * np.sqrt(2.0)
         self._gh_w = w / np.sqrt(np.pi)
@@ -821,7 +872,9 @@ class PanelMSAR:
         else:
             names += ["sigma"]
         names += ["g"]
-        if self.random_intercepts:
+        if self.convergence:
+            names += ["a_bar", "log_omega", "logit_lambda"]
+        elif self.random_intercepts:
             names += ["alpha", "log_omega"]
         else:
             names += ["a"]
@@ -865,7 +918,14 @@ class PanelMSAR:
         g = theta[i]
         i += 1
         omega = 0.0
-        if self.random_intercepts:
+        lam = 1.0
+        if self.convergence:
+            a = theta[i]
+            i += 1
+            omega = float(np.exp(np.clip(theta[i], -12.0, 5.0)))
+            i += 1
+            lam = _lam_from_u(theta[i])
+        elif self.random_intercepts:
             a = theta[i]
             i += 1
             omega = float(np.exp(np.clip(theta[i], -12.0, 5.0)))
@@ -873,10 +933,10 @@ class PanelMSAR:
             a = theta[i]
         return {
             "P": P, "rho": rho, "mu": mu, "sigma": sig, "g": g, "a": a,
-            "alpha": a, "omega": omega,
+            "alpha": a, "omega": omega, "a_bar": a, "lambda": lam,
         }
 
-    def _pack_from_dicts(self, P, rho, mu, sig, g, a, omega=None):
+    def _pack_from_dicts(self, P, rho, mu, sig, g, a, omega=None, lam=None):
         k = self.n_regimes
         logits = np.log(np.clip(P, 1e-12, 1.0))
         raw = logits[:, : k - 1] - logits[:, k - 1][:, None]
@@ -891,7 +951,12 @@ class PanelMSAR:
         else:
             th += [float(np.log(np.mean(sig)))]
         th += [float(g)]
-        if self.random_intercepts:
+        if self.convergence:
+            th += [float(a)]
+            om = 0.2 if omega is None else float(omega)
+            th += [float(np.log(max(om, 1e-8)))]
+            th += [_u_from_lam(0.98 if lam is None else lam)]
+        elif self.random_intercepts:
             th += [float(a)]
             om = 0.2 if omega is None else float(omega)
             th += [float(np.log(max(om, 1e-8)))]
@@ -902,6 +967,24 @@ class PanelMSAR:
     def _trend(self, a, g, t):
         t = np.asarray(t, dtype=float)
         return float(a) + float(g) * t
+
+    def _mean_path(self, a, g, t, b=0.0, lam=1.0, t_entry=None):
+        t = np.asarray(t, dtype=float)
+        path = float(a) + float(g) * t
+        if not self.convergence:
+            return path
+        t0 = float(t[0] if t_entry is None else t_entry)
+        age = np.maximum(t - t0, 0.0)
+        lam = float(np.clip(lam, 1e-12, 1.0 - 1e-12))
+        return path + float(b) * np.power(lam, age)
+
+    def _theta_bounds(self):
+        if not self.convergence:
+            return None
+        names = self.param_names()
+        b = [(None, None)] * len(names)
+        b[names.index("logit_lambda")] = (-LOGIT_LAMBDA_MAX, LOGIT_LAMBDA_MAX)
+        return b
 
     def _stack_panels(self, panels):
         lengths = np.array([len(y) for y, _ in panels], dtype=np.int64)
@@ -918,14 +1001,16 @@ class PanelMSAR:
         return float(beta[0]), float(beta[1])
 
     def _re_nodes(self, p):
-        """Gauss-Hermite nodes and weights for ∫ L(a) p(a) da."""
-        alpha = float(p["alpha"])
+        """Gauss-Hermite nodes and weights for the random effect."""
         omega = max(float(p["omega"]), 1e-8)
+        if self.convergence:
+            return omega * self._gh_z, self._gh_w
+        alpha = float(p["alpha"])
         aks = alpha + omega * self._gh_z
         return aks, self._gh_w
 
     def _country_ll_re(self, y, t, p, pi0):
-        """log ∫ L(y | a) p(a) da."""
+        """log ∫ L(y | a) p(a) da (or ∫ L(y | b) p(b) db if catch-up)."""
         g = float(p["g"])
         rho = np.ascontiguousarray(p["rho"], dtype=np.float64)
         mu = np.ascontiguousarray(p["mu"], dtype=np.float64)
@@ -936,8 +1021,16 @@ class PanelMSAR:
         aks, wks = self._re_nodes(p)
         nq = aks.size
         logc = np.empty(nq)
+        t_entry = float(t[0])
+        lam = float(p.get("lambda", 1.0))
+        abar = float(p["a"])
         for k in range(nq):
-            z = y - self._trend(float(aks[k]), g, t)
+            if self.convergence:
+                z = y - self._mean_path(
+                    abar, g, t, b=float(aks[k]), lam=lam, t_entry=t_entry
+                )
+            else:
+                z = y - self._trend(float(aks[k]), g, t)
             try:
                 ll = _country_ll_nb(z, rho, mu, sig, P, pi0)
             except Exception:
@@ -962,17 +1055,27 @@ class PanelMSAR:
         return ll
 
     def _re_posterior_a(self, packed, p):
-        """Posterior mean E[a_i | data] at the quadrature nodes."""
+        """Posterior mean of a_i, or of b_i when convergence is on."""
         ycat, tcat, lengths, offsets = packed
         pi0 = _stationary_probs(p["P"]).astype(np.float64)
         n = int(lengths.shape[0])
         a_hat = np.empty(n)
         aks, wks = self._re_nodes(p)
+        lam = float(p.get("lambda", 1.0))
+        abar = float(p["a"])
+        g = float(p["g"])
         for i in range(n):
             sl = slice(int(offsets[i]), int(offsets[i] + lengths[i]))
+            tt = tcat[sl]
+            t_entry = float(tt[0])
             logc = np.empty(aks.size)
             for k in range(aks.size):
-                z = ycat[sl] - self._trend(aks[k], p["g"], tcat[sl])
+                if self.convergence:
+                    z = ycat[sl] - self._mean_path(
+                        abar, g, tt, b=float(aks[k]), lam=lam, t_entry=t_entry
+                    )
+                else:
+                    z = ycat[sl] - self._trend(aks[k], g, tt)
                 try:
                     ll = _country_ll_nb(
                         np.ascontiguousarray(z, dtype=np.float64),
@@ -1067,15 +1170,18 @@ class PanelMSAR:
             a0 = float(np.mean(ais))
             omega0 = float(np.std(ais, ddof=1) or 0.3)
 
-        def one(g, a, rho, mu_spread, sigs, P, jitter=0.0, omega=None):
+        def one(g, a, rho, mu_spread, sigs, P, jitter=0.0, omega=None, lam=None):
             mu = np.zeros(k) if self.zero_mu else spread_mu(mu_spread)
             om = omega0 if omega is None else omega
             th = self._pack_from_dicts(
                 P, np.full(k, rho), mu, np.asarray(sigs, float), g, a,
-                omega=om,
+                omega=om, lam=lam,
             )
             if jitter:
                 th = th + rng.normal(0.0, jitter, size=th.shape)
+                if self.convergence:
+                    j = self.param_names().index("logit_lambda")
+                    th[j] = np.clip(th[j], -LOGIT_LAMBDA_MAX, LOGIT_LAMBDA_MAX)
             return th
 
         dist = np.abs(np.arange(k) - mid)
@@ -1083,12 +1189,24 @@ class PanelMSAR:
         sig_het = s_hat * (0.8 + 0.4 * scale)
         sig_base = np.full(k, s_hat)
 
-        starts = [
-            one(g0, a0, rho0, s_hat, sig_het, P0),
-            one(g0, a0, 0.5, 0.5 * s_hat, sig_base, P0),
-            one(g0, a0, 0.85, 1.5 * s_hat, sig_het, P0),
-            one(0.0, float(np.mean(ys)), 0.6, s_hat, sig_base, P0),
+        rho_hi = float(min(0.95, self.rho_max - 1e-4))
+        templates = [
+            (g0, a0, rho0, s_hat, sig_het, 0.98),
+            (g0, a0, 0.5, 0.5 * s_hat, sig_base, 0.95),
+            (g0, a0, 0.85, 1.5 * s_hat, sig_het, 0.999),
+            (0.0, float(np.mean(ys)), 0.6, s_hat, sig_base, 0.98),
+            (g0, a0, rho_hi, s_hat, sig_het, 0.90),
+            (g0, a0, rho0, 2.0 * s_hat, sig_het, 0.97),
+            (g0, a0, 0.3, s_hat, sig_base, 0.999),
         ]
+        starts = []
+        for g, a, rho, spread, sigs, lam0 in templates:
+            starts.append(
+                one(
+                    g, a, rho, spread, sigs, P0,
+                    lam=(lam0 if self.convergence else None),
+                )
+            )
         while len(starts) < n_starts:
             starts.append(
                 one(
@@ -1099,6 +1217,7 @@ class PanelMSAR:
                     np.maximum(sig_het * rng.uniform(0.7, 1.4, size=k), 1e-4),
                     P0,
                     jitter=0.08,
+                    lam=(rng.uniform(0.9, 0.999) if self.convergence else None),
                 )
             )
         return starts[:n_starts]
@@ -1124,6 +1243,7 @@ class PanelMSAR:
             self._last_mu_shift = 0.0
             return self._pack_from_dicts(
                 P, rho, mu, sig, p["g"], p["a"], omega=p.get("omega"),
+                lam=p.get("lambda"),
             )
         order = np.argsort(p["mu"])
         mu = p["mu"][order]
@@ -1139,6 +1259,7 @@ class PanelMSAR:
         self._last_mu_shift = shift
         return self._pack_from_dicts(
             P, rho, mu, sig, g, a, omega=p.get("omega"),
+            lam=p.get("lambda"),
         )
 
     def _se_transformed(self, theta, se_raw, cov=None):
@@ -1153,12 +1274,18 @@ class PanelMSAR:
         out = {}
         if "a" in raw:
             out["a"] = raw["a"]
+        if "a_bar" in raw:
+            out["a_bar"] = raw["a_bar"]
+            out["a"] = raw["a_bar"]
         if "g" in raw:
             out["g"] = raw["g"]
         if "alpha" in raw:
             out["alpha"] = raw["alpha"]
         if "log_omega" in raw:
             out["omega"] = raw["log_omega"] * float(p.get("omega", 0.0))
+        if "logit_lambda" in raw:
+            lam = float(p.get("lambda", 0.0))
+            out["lambda"] = raw["logit_lambda"] * lam * (1.0 - lam)
 
         cap = float(self.rho_max)
         if not self.common_rho:
@@ -1217,7 +1344,7 @@ class PanelMSAR:
         country,
         time,
         y,
-        n_starts=8,
+        n_starts=7,
         maxiter=400,
         seed=1,
         compute_se=True,
@@ -1274,29 +1401,62 @@ class PanelMSAR:
         packed = self._stack_panels(panels)
         _warmup_numba()
         starts = self._starting_values(panels, n_starts, rng)
-        best, best_fun, best_msg, best_ok = None, np.inf, "", False
-        n_ok = 0
-        for i, th0 in enumerate(starts):
+        bounds = self._theta_bounds()
+        n_workers = min(n_starts, int(os.cpu_count() or n_starts))
+
+        def _run_start(i, th0):
             opt = minimize(
                 self._nll,
                 th0,
                 args=(packed,),
                 method="L-BFGS-B",
+                bounds=bounds,
                 options={"maxiter": maxiter, "ftol": 1e-8},
             )
-            if opt.success:
-                n_ok += 1
+            return (
+                i,
+                float(opt.fun),
+                np.asarray(opt.x, dtype=float).copy(),
+                bool(opt.success),
+                str(opt.message),
+            )
+
+        def _announce(rec):
             if verbose:
+                i, fun, _, ok, msg = rec
                 print(
-                    f"  start {i + 1}/{n_starts}: nll={opt.fun:.4f}  "
-                    f"success={opt.success}  {opt.message}",
+                    f"  start {i + 1}/{n_starts}: nll={fun:.4f}  "
+                    f"success={ok}  {msg}",
                     flush=True,
                 )
-            if opt.fun < best_fun:
-                best_fun = float(opt.fun)
-                best = opt.x.copy()
-                best_msg = str(opt.message)
-                best_ok = bool(opt.success)
+            return rec
+
+        if n_starts == 1 or n_workers == 1:
+            raw = [
+                _announce(_run_start(i, th0))
+                for i, th0 in enumerate(starts)
+            ]
+        else:
+            raw = []
+            with ThreadPoolExecutor(max_workers=n_workers) as pool:
+                futs = [
+                    pool.submit(_run_start, i, th0)
+                    for i, th0 in enumerate(starts)
+                ]
+                for fut in as_completed(futs):
+                    raw.append(_announce(fut.result()))
+            raw.sort(key=lambda r: r[0])
+
+        best, best_fun, best_msg, best_ok = None, np.inf, "", False
+        n_ok = 0
+        for i, fun, x, ok, msg in raw:
+            if ok:
+                n_ok += 1
+            if fun < best_fun:
+                best_fun = fun
+                best = x
+                best_msg = msg
+                best_ok = ok
 
         if best is None:
             raise RuntimeError(
@@ -1311,6 +1471,7 @@ class PanelMSAR:
             best,
             args=(packed,),
             method="L-BFGS-B",
+            bounds=bounds,
             options={"maxiter": maxiter, "ftol": 1e-9},
         )
         if opt.fun <= best_fun + 1e-6:
@@ -1332,7 +1493,12 @@ class PanelMSAR:
         names = self.param_names()
         ll = -best_fun
         n_c = len(orig_panels)
-        if self.random_intercepts:
+        b_hat = None
+        if self.convergence:
+            b_hat = self._re_posterior_a(packed, p)
+            a_hat = float(p["a"]) + b_hat
+            g_hat = np.full(n_c, float(p["g"]))
+        elif self.random_intercepts:
             a_hat = self._re_posterior_a(packed, p)
             g_hat = np.full(n_c, float(p["g"]))
         else:
@@ -1366,6 +1532,18 @@ class PanelMSAR:
                 "Regime standard deviations differ by more than 10x; "
                 "one sigma may have exploded."
             )
+        if self.convergence:
+            lam_hat = float(p["lambda"])
+            if lam_hat > 0.995:
+                warnings.append(
+                    f"lambda={lam_hat:.4f} > 0.995; catch-up is "
+                    "indistinguishable from permanent RE intercepts."
+                )
+            elif lam_hat < 0.5:
+                warnings.append(
+                    f"lambda={lam_hat:.4f} < 0.5; near-immediate jump "
+                    "to the common path."
+                )
 
         if detrend_pdf:
             store_filtered = True
@@ -1373,7 +1551,14 @@ class PanelMSAR:
         if store_filtered:
             pi0 = _stationary_probs(p["P"])
             for i, (cid, (yy, tt)) in enumerate(zip(ids, orig_panels)):
-                z = yy - self._trend(a_hat[i], g_hat[i], tt)
+                if self.convergence:
+                    z = yy - self._mean_path(
+                        float(p["a"]), float(p["g"]), tt,
+                        b=float(b_hat[i]), lam=float(p["lambda"]),
+                        t_entry=float(tt[0]),
+                    )
+                else:
+                    z = yy - self._trend(a_hat[i], g_hat[i], tt)
                 _, filt = _country_loglik(
                     z, p["rho"], p["mu"], p["sigma"], p["P"], pi0, return_filter=True
                 )
@@ -1400,7 +1585,13 @@ class PanelMSAR:
             "pi": pi_hat,
             "Ez": ez_hat,
         }
-        if self.random_intercepts:
+        if self.convergence:
+            params["a_bar"] = float(p["a"])
+            params["lambda"] = float(p["lambda"])
+            params["omega"] = float(p["omega"])
+            if b_hat is not None:
+                params["b"] = {cid: float(b_hat[i]) for i, cid in enumerate(ids)}
+        elif self.random_intercepts:
             params["alpha"] = float(p["alpha"])
             params["omega"] = float(p["omega"])
         if se_params is not None and cov is not None:
@@ -1441,6 +1632,7 @@ class PanelMSAR:
             common_sigma=self.common_sigma,
             zero_mu=self.zero_mu,
             random_intercepts=self.random_intercepts,
+            convergence=self.convergence,
             rho_max=self.rho_max,
         )
         if detrend_pdf:
@@ -1522,6 +1714,7 @@ class PanelMSAR:
                 theta,
                 args=(packed,),
                 method="L-BFGS-B",
+                bounds=self._theta_bounds(),
                 options={"maxiter": int(maxiter), "ftol": 1e-8},
             )
             if (not np.isfinite(opt.fun)) or opt.fun > 1e8:

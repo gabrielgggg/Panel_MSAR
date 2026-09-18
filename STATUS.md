@@ -34,7 +34,7 @@ Typical fit call for recent reports:
 PanelMSAR(
     n_regimes=3, common_rho=False, common_sigma=False,
     random_intercepts=..., zero_mu=False, min_t=12, rho_max=0.99,
-).fit(..., n_starts=3, maxiter=400, seed=1, compute_se=True, store_filtered=True)
+).fit(..., n_starts=7, maxiter=400, seed=1, compute_se=True, store_filtered=True)
 ```
 
 Compile TeX from the `.tex` parent directory (`compile_tex` in `msar_report.py`).
@@ -54,7 +54,7 @@ python data_2026.09.17/run_msar_re.py
 python demo_panel_msar.py
 ```
 
-A full RE fit is on the order of 15–40 minutes. `n_starts=3` in the 09.17 runner.
+A full RE fit is on the order of 15–40 minutes. Empirical runners use `n_starts=7`; the starts run in parallel threads. The final polish from the best start is serial.
 
 ## Open issues / next questions
 
