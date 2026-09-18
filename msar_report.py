@@ -150,21 +150,36 @@ def _trend_note(res):
     bits = []
     a, g = pr.get("a"), pr.get("g")
     if getattr(res, "convergence", False):
-        abar = pr.get("a_bar")
+        al = pr.get("alpha", pr.get("a_bar"))
         lam = pr.get("lambda")
         om = pr.get("omega")
-        sa = se.get("a_bar")
+        omb = pr.get("omega_b")
+        sa = se.get("alpha")
         sl = se.get("lambda")
         so = se.get("omega")
+        sob = se.get("omega_b")
         extra_a = f" ({float(sa):.4f})" if sa is not None and np.isfinite(float(sa)) else ""
         extra_l = f" ({float(sl):.4f})" if sl is not None and np.isfinite(float(sl)) else ""
         extra_o = f" ({float(so):.4f})" if so is not None and np.isfinite(float(so)) else ""
+        extra_b = f" ({float(sob):.4f})" if sob is not None and np.isfinite(float(sob)) else ""
+        lam_txt = rf"$\lambda={float(lam):.4f}$"
+        if getattr(res, "lambda_fixed", None) is not None:
+            lam_txt += r" (fixed)"
+        elif extra_l:
+            lam_txt += extra_l
         bits.append(
-            rf"Common catch-up $y_{{it}}=\bar a + g t + b_i\lambda^{{t-T_{{i0}}}}+z_{{it}}$ "
-            rf"with $\bar a={float(abar):.4f}${extra_a}, "
-            rf"$\lambda={float(lam):.4f}${extra_l}, "
-            rf"$\omega_b={float(om):.4f}${extra_o}."
+            rf"Permanent RE intercepts and catch-up "
+            rf"$y_{{it}}=a_i + g t + b_i\lambda^{{t-T_{{i0}}}}+z_{{it}}$ "
+            rf"with $\alpha={float(al):.4f}${extra_a}, "
+            rf"$\omega={float(om):.4f}${extra_o}, "
+            + lam_txt + rf", $\omega_b={float(omb):.4f}${extra_b}."
         )
+        if isinstance(a, dict):
+            aa = np.array(list(a.values()), dtype=float)
+            bits.append(
+                rf"Posterior-mean $a_i$: mean {aa.mean():.3f}, "
+                rf"min {aa.min():.3f}, max {aa.max():.3f}."
+            )
         bb = pr.get("b")
         if isinstance(bb, dict) and bb:
             bv = np.array(list(bb.values()), dtype=float)

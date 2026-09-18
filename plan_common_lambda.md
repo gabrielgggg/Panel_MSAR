@@ -91,7 +91,7 @@ From current OLS intercepts \(a_i^{\mathrm{OLS}}\) (or country means of \(y-g_0 
 - \(\omega_{b0} = \mathrm{std}(a_i^{\mathrm{OLS}})\)
 - \(\lambda_0 = 0.98\) (logit \(\approx 3.89\)), plus a start at \(0.95\) and one near \(0.999\) (almost the old RE)
 
-Keep the existing MS-AR multi-start skeleton (`n_starts=7` in empirical runners, threaded). Reset any inner cache each start, as now.
+Keep the existing MS-AR multi-start skeleton (`n_starts=7` in empirical runners, process pool). Reset any inner cache each start, as now.
 
 If a start wants \(\lambda\to 1\), logit \(\to+\infty\); clip logit to something like \([-20, 20]\) (\(\lambda\in(2\times10^{-9},1-2\times10^{-9})\)) so the optimizer does not overflow \(\lambda^{t-T_{i0}}\).
 

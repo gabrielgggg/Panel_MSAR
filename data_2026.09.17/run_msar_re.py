@@ -23,17 +23,23 @@ SAMPLE_CSV = HERE / "estimation_sample.csv"
 YCOL = "realGDPsa_usd_pa_empl"
 
 # Specs 1–2 were already estimated; keep those sections and cycle PDFs.
-# This runner only fits spec 3 (common-λ catch-up).
-SPECS_FROZEN = [
-    dict(key="common_ag", title="Common intercept and linear trend"),
-    dict(key="re_ai", title="Random-effects intercepts, common linear trend"),
+# This runner fits spec 3 (λ fixed at Barro 0.98) and spec 4 (free λ).
+SPECS_NEW = [
+    dict(
+        key="lambda_barro",
+        title="RE intercepts plus catch-up, lambda fixed at Barro 0.98",
+        random_intercepts=True,
+        convergence=True,
+        lambda_value=0.98,
+    ),
+    dict(
+        key="lambda_free",
+        title="RE intercepts plus catch-up, free lambda in (0, 0.985)",
+        random_intercepts=True,
+        convergence=True,
+        lambda_value=None,
+    ),
 ]
-SPEC_LAMBDA = dict(
-    key="lambda",
-    title="Common-lambda catch-up around the global trend",
-    random_intercepts=True,
-    convergence=True,
-)
 FROZEN_12 = HERE / "msar_re_specs12.tex"
 
 
@@ -121,13 +127,17 @@ def _tex_preamble():
         r"$a_i\sim\mathcal{N}(\alpha,\omega^2)$; $\alpha$ and $\omega$ are estimated by "
         r"maximum likelihood, integrating each country's Hamilton-filter likelihood "
         r"by 11-point Gauss--Hermite quadrature. Cycles then use the posterior mean of $a_i$. "
-        r"The third specification replaces a permanent intercept with a decaying gap",
+        r"Specifications 3 and 4 keep a permanent random intercept and add a "
+        r"decaying entry gap",
         r"\begin{align}",
-        r"y_{it} &= \bar a + g\, t + b_i\,\lambda^{t-T_{i0}} + z_{it}, \\",
-        r"b_i &\sim \mathcal{N}(0,\omega_b^2),\qquad 0<\lambda<1.",
+        r"y_{it} &= a_i + g\, t + b_i\,\lambda^{t-T_{i0}} + z_{it}, \\",
+        r"a_i &\sim \mathcal{N}(\alpha,\omega^2),\qquad "
+        r"b_i \sim \mathcal{N}(0,\omega_b^2) \ \text{independent}.",
         r"\end{align}",
-        r"$T_{i0}$ is country $i$'s first observation. $\lambda=1$ recovers the "
-        r"random-effects intercept model (on the boundary of $(0,1)$). "
+        r"$T_{i0}$ is country $i$'s first observation. Spec 3 holds "
+        r"$\lambda=0.98$ (Barro 2\% per year). Spec 4 estimates $\lambda$ in "
+        r"$(0,0.985)$. The two random effects are integrated by $7\times 7$ "
+        r"Gauss--Hermite quadrature. "
         r"The outcome is log seasonally adjusted real GDP per worker "
         r"(period-average USD) from the 2026-09-17 quarterly panel. "
         r"Calendar time is taken from the period stamp $t$ (year-fraction). "
@@ -194,6 +204,8 @@ def fit_spec(df, spec, verbose=True):
         common_sigma=False,
         random_intercepts=spec["random_intercepts"],
         convergence=spec.get("convergence", False),
+        lambda_value=spec.get("lambda_value"),
+        lambda_max=0.985,
         zero_mu=False,
         min_t=12,
         rho_max=0.99,
@@ -227,18 +239,17 @@ def main():
     if not FROZEN_12.exists():
         raise FileNotFoundError(
             f"{FROZEN_12} is missing. Specs 1–2 live there; this runner "
-            "only estimates the common-λ spec."
+            "only estimates the catch-up specs."
         )
     FIGS.mkdir(exist_ok=True)
-    spec = SPEC_LAMBDA
-    res = fit_spec(df, spec)
-    fig = FIGS / f"cycle_{spec['key']}.pdf"
-    save_cycle_pdf(res, fig, spec["title"])
-    rel = fig.relative_to(HERE).as_posix()
-    TEX.write_text(
-        _tex_report(sample_line, [(spec, res, Path(rel))]),
-        encoding="utf-8",
-    )
+    fitted = []
+    for spec in SPECS_NEW:
+        res = fit_spec(df, spec)
+        fig = FIGS / f"cycle_{spec['key']}.pdf"
+        save_cycle_pdf(res, fig, spec["title"])
+        rel = fig.relative_to(HERE).as_posix()
+        fitted.append((spec, res, Path(rel)))
+    TEX.write_text(_tex_report(sample_line, fitted), encoding="utf-8")
     compile_tex(TEX)
     print(f"\nWrote {OUT_PDF}", flush=True)
 
