@@ -407,6 +407,7 @@ class PanelMSARResults:
     rho_max: float = 0.995
     lambda_max: float = 0.985
     lambda_fixed: Optional[float] = None
+    include_trend: bool = True
 
     def summary(self) -> str:
         k = self.n_regimes
@@ -521,11 +522,12 @@ class PanelMSARResults:
             lines.append(f"{'a':<{lab}}{_cell_est(a, W)}")
             if have_se:
                 lines.append(f"{'':<{lab}}{_cell_se(se_a, W)}")
-        g = float(pr["g"])
-        se_g = se.get("g") if have_se else None
-        lines.append(f"{'g':<{lab}}{_cell_est(g, W)}")
-        if have_se:
-            lines.append(f"{'':<{lab}}{_cell_se(se_g, W)}")
+        if getattr(self, "include_trend", True):
+            g = float(pr["g"])
+            se_g = se.get("g") if have_se else None
+            lines.append(f"{'g':<{lab}}{_cell_est(g, W)}")
+            if have_se:
+                lines.append(f"{'':<{lab}}{_cell_se(se_g, W)}")
         if self.common_rho:
             r = float(rho[0])
             lines.append(f"{'rho (common)':<{lab}}{_cell_est(r, W)}")
@@ -665,6 +667,9 @@ class PanelMSAR:
     lambda_max : float
         Strict upper bound on free λ. Mapped as lambda_max/(1+exp(-u)).
         Default 0.985.
+    include_trend : bool
+        If True (default), estimate a common slope g. If False, g is
+        fixed at 0 (intercept-only mean path).
     zero_mu : bool
         If True, every regime mean is restricted to 0 (no free mu in
         the outer parameter vector). Regimes are then labeled by
@@ -691,6 +696,7 @@ class PanelMSAR:
         rho_max=RHO_MAX,
         lambda_value=None,
         lambda_max=LAM_MAX,
+        include_trend=True,
     ):
         if not isinstance(n_regimes, (int, np.integer)):
             raise TypeError(
@@ -751,6 +757,7 @@ class PanelMSAR:
                     f"lambda_value must be in (0, 1) (got {lambda_value})."
                 )
             self.lambda_fixed = lv
+        self.include_trend = bool(include_trend)
         self.res_ = None
         self._ols = None
         self._last_mu_shift = 0.0
@@ -948,7 +955,8 @@ class PanelMSAR:
             names += [f"sigma[{s}]" for s in range(k)]
         else:
             names += ["sigma"]
-        names += ["g"]
+        if self.include_trend:
+            names += ["g"]
         if self.convergence:
             names += ["alpha", "log_omega", "log_omega_b"]
             if self.lambda_fixed is None:
@@ -994,8 +1002,11 @@ class PanelMSAR:
             sig = np.full(k, np.exp(np.clip(theta[i], -20.0, 5.0)))
             i += 1
 
-        g = theta[i]
-        i += 1
+        if self.include_trend:
+            g = theta[i]
+            i += 1
+        else:
+            g = 0.0
         omega = 0.0
         omega_b = 0.0
         lam = 1.0
@@ -1038,7 +1049,8 @@ class PanelMSAR:
             th += [float(np.log(s)) for s in sig]
         else:
             th += [float(np.log(np.mean(sig)))]
-        th += [float(g)]
+        if self.include_trend:
+            th += [float(g)]
         if self.convergence:
             th += [float(a)]
             om = 0.2 if omega is None else float(omega)
@@ -1059,11 +1071,13 @@ class PanelMSAR:
 
     def _trend(self, a, g, t):
         t = np.asarray(t, dtype=float)
+        if not self.include_trend:
+            return np.full_like(t, float(a), dtype=float)
         return float(a) + float(g) * t
 
     def _mean_path(self, a, g, t, b=0.0, lam=1.0, t_entry=None):
         t = np.asarray(t, dtype=float)
-        path = float(a) + float(g) * t
+        path = self._trend(a, g, t)
         if not self.convergence:
             return path
         t0 = float(t[0] if t_entry is None else t_entry)
@@ -1215,13 +1229,19 @@ class PanelMSAR:
     def _starting_values(self, panels, n_starts, rng):
         ys = np.concatenate([y for y, _ in panels])
         ts = np.concatenate([t for _, t in panels])
-        X = np.column_stack([np.ones(len(ys)), ts])
-        beta, *_ = np.linalg.lstsq(X, ys, rcond=None)
-        a0, g0 = float(beta[0]), float(beta[1])
+        if self.include_trend:
+            X = np.column_stack([np.ones(len(ys)), ts])
+            beta, *_ = np.linalg.lstsq(X, ys, rcond=None)
+            a0, g0 = float(beta[0]), float(beta[1])
+        else:
+            a0, g0 = float(np.mean(ys)), 0.0
         if self.random_intercepts:
             pieces = []
             for y, t in panels:
-                ai, _gi = self._ols_ag(y, t)
+                if self.include_trend:
+                    ai, _gi = self._ols_ag(y, t)
+                else:
+                    ai = float(np.mean(y))
                 pieces.append(y - self._trend(ai, g0, t))
             resid = np.concatenate(pieces)
         else:
@@ -1230,7 +1250,10 @@ class PanelMSAR:
 
         rhos = []
         for y, t in panels:
-            ai, _gi = self._ols_ag(y, t)
+            if self.include_trend:
+                ai, _gi = self._ols_ag(y, t)
+            else:
+                ai = float(np.mean(y))
             a_use = ai if self.random_intercepts else a0
             z = y - self._trend(a_use, g0, t)
             if z.size < 4:
@@ -1265,7 +1288,10 @@ class PanelMSAR:
 
         omega0 = 0.2
         if self.random_intercepts:
-            ais = [self._ols_ag(y, t)[0] for y, t in panels]
+            if self.include_trend:
+                ais = [self._ols_ag(y, t)[0] for y, t in panels]
+            else:
+                ais = [float(np.mean(y)) for y, _t in panels]
             a0 = float(np.mean(ais))
             omega0 = float(np.std(ais, ddof=1) or 0.3)
 
@@ -1755,6 +1781,7 @@ class PanelMSAR:
             rho_max=self.rho_max,
             lambda_max=self.lambda_max,
             lambda_fixed=self.lambda_fixed,
+            include_trend=self.include_trend,
         )
         if detrend_pdf:
             self.res_.plot_detrended(detrend_pdf)

@@ -167,10 +167,15 @@ def _trend_note(res):
             lam_txt += r" (fixed)"
         elif extra_l:
             lam_txt += extra_l
+        eq = (
+            r"$y_{it}=a_i + b_i\lambda^{t-T_{i0}}+z_{it}$"
+            if not getattr(res, "include_trend", True)
+            else r"$y_{it}=a_i + g t + b_i\lambda^{t-T_{i0}}+z_{it}$"
+        )
         bits.append(
             rf"Permanent RE intercepts and catch-up "
-            rf"$y_{{it}}=a_i + g t + b_i\lambda^{{t-T_{{i0}}}}+z_{{it}}$ "
-            rf"with $\alpha={float(al):.4f}${extra_a}, "
+            + eq +
+            rf" with $\alpha={float(al):.4f}${extra_a}, "
             rf"$\omega={float(om):.4f}${extra_o}, "
             + lam_txt + rf", $\omega_b={float(omb):.4f}${extra_b}."
         )
@@ -207,7 +212,7 @@ def _trend_note(res):
         sa = se.get("a")
         extra = f" ({float(sa):.4f})" if sa is not None and np.isfinite(sa) else ""
         bits.append(rf"Common intercept $a={float(a):.4f}${extra}.")
-    if g is not None and not isinstance(g, dict):
+    if getattr(res, "include_trend", True) and g is not None and not isinstance(g, dict):
         sg = se.get("g")
         extra = f" ({float(sg):.4f})" if sg is not None and np.isfinite(sg) else ""
         bits.append(rf"Common slope $g={float(g):.4f}${extra}.")

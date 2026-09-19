@@ -22,25 +22,16 @@ FIGS = HERE / "figs"
 SAMPLE_CSV = HERE / "estimation_sample.csv"
 YCOL = "realGDPsa_usd_pa_empl"
 
-# Specs 1–2 were already estimated; keep those sections and cycle PDFs.
-# This runner fits spec 3 (λ fixed at Barro 0.98) and spec 4 (free λ).
-SPECS_NEW = [
-    dict(
-        key="lambda_barro",
-        title="RE intercepts plus catch-up, lambda fixed at Barro 0.98",
-        random_intercepts=True,
-        convergence=True,
-        lambda_value=0.98,
-    ),
-    dict(
-        key="lambda_free",
-        title="RE intercepts plus catch-up, free lambda in (0, 0.985)",
-        random_intercepts=True,
-        convergence=True,
-        lambda_value=None,
-    ),
-]
+# Specs 1–3 already estimated. This runner fits spec 4 only (free λ, 4 starts).
+SPEC_4 = dict(
+    key="lambda_free",
+    title="RE intercepts plus catch-up, free lambda in (0, 0.985)",
+    random_intercepts=True,
+    convergence=True,
+    lambda_value=None,
+)
 FROZEN_12 = HERE / "msar_re_specs12.tex"
+FROZEN_3 = HERE / "msar_re_spec3.tex"
 
 
 def load_panel(path: Path | None = None) -> pd.DataFrame:
@@ -188,6 +179,8 @@ def _tex_report(sample_line, fitted):
     parts = _tex_preamble()
     if FROZEN_12.exists():
         parts.append(FROZEN_12.read_text(encoding="utf-8").rstrip())
+    if FROZEN_3.exists():
+        parts.append(FROZEN_3.read_text(encoding="utf-8").rstrip())
     for spec, res, fig in fitted:
         parts += _tex_spec_section(sample_line, spec, res, fig)
     parts.append(r"\end{document}")
@@ -214,7 +207,7 @@ def fit_spec(df, spec, verbose=True):
         df["country"],
         df["time"],
         df["y"],
-        n_starts=7,
+        n_starts=4,
         maxiter=400,
         seed=1,
         compute_se=True,
@@ -237,18 +230,19 @@ def main():
     )
     print(sample_line, flush=True)
     if not FROZEN_12.exists():
-        raise FileNotFoundError(
-            f"{FROZEN_12} is missing. Specs 1–2 live there; this runner "
-            "only estimates the catch-up specs."
-        )
+        raise FileNotFoundError(f"{FROZEN_12} is missing (specs 1–2).")
+    if not FROZEN_3.exists():
+        raise FileNotFoundError(f"{FROZEN_3} is missing (spec 3).")
+    barro_fig = FIGS / "cycle_lambda_barro.pdf"
+    if not barro_fig.exists():
+        raise FileNotFoundError(f"{barro_fig} is missing (spec 3 cycle plot).")
     FIGS.mkdir(exist_ok=True)
-    fitted = []
-    for spec in SPECS_NEW:
-        res = fit_spec(df, spec)
-        fig = FIGS / f"cycle_{spec['key']}.pdf"
-        save_cycle_pdf(res, fig, spec["title"])
-        rel = fig.relative_to(HERE).as_posix()
-        fitted.append((spec, res, Path(rel)))
+    spec = SPEC_4
+    res = fit_spec(df, spec)
+    fig = FIGS / f"cycle_{spec['key']}.pdf"
+    save_cycle_pdf(res, fig, spec["title"])
+    rel = fig.relative_to(HERE).as_posix()
+    fitted = [(spec, res, Path(rel))]
     TEX.write_text(_tex_report(sample_line, fitted), encoding="utf-8")
     compile_tex(TEX)
     print(f"\nWrote {OUT_PDF}", flush=True)

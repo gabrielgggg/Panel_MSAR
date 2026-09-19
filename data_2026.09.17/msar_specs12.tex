@@ -1,0 +1,107 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,graphicx,setspace,caption,hyperref}
+\usepackage[T1]{fontenc}
+\usepackage{mathpazo}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}
+\captionsetup{font=small,skip=6pt}
+\title{Panel MS-AR(1): common trend and random-effects intercepts\\[0.4em]
+\large Seasonally adjusted real GDP per worker (period-average USD)}
+\author{}
+\date{}
+\begin{document}
+\maketitle
+\section{Model}
+Joint panel Markov-switching AR(1) around a \emph{linear} trend, with three regimes:
+\begin{align}
+y_{it} &= a_i + g\, t + z_{it}, \\
+z_{i,t+1} &= \bigl(1-\rho(s_{it})\bigr)\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}, \\
+s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}).
+\end{align}
+The outcome is log seasonally adjusted real GDP per worker (period-average USD)
+from the 2026-09-17 quarterly panel. Calendar time is taken from the period stamp
+$t$ (year-fraction). The slope $g$ is per year and common across countries.
+Latent paths $s_{it}$ are country-specific. The regime dated $t$ governs the
+transition from $z_t$ to $z_{t+1}$. $\sigma$ and $\rho$ switch with the regime.
+The median $\mu$ is pinned at 0. $|\rho|<0.99$.
+
+Two specifications for the intercept. In the pooled specification $a_i\equiv a$.
+In the random-effects specification $a_i\sim\mathcal{N}(\alpha,\omega^2)$;
+$\alpha$ and $\omega$ are estimated by maximum likelihood, integrating each
+country's Hamilton-filter likelihood by 11-point Gauss--Hermite quadrature.
+Plotted cycles use the posterior mean of $a_i$ in that specification, and the
+common $a$ in the pooled specification.
+
+Standard errors (in parentheses) are delta-method from a numerical Hessian on
+shared parameters. $\pi$ is the ergodic distribution of $\Pi$. $E[z]$ is the
+long-run mean of the cycle implied by $\mu$, $\rho$, and $\Pi$.
+
+\clearpage
+\section{Common intercept and linear trend}
+2026-09-17 SA panel, full sample: log real GDP per worker. 74 countries, 8670 observations, 1950-Q1--2026-Q2. Fitted countries: 74. Observations: 8670. Log-likelihood: 22607.90. Ergodic mean of the cycle $E[z]=0.7539$ (0.0689).
+Common intercept $a=-6.0145$ (0.0592). Common slope $g=0.0079$ (0.0005).
+\begin{table}[h]
+\centering
+\caption{Regime AR(1), transition matrix, and ergodic $\pi$. Columns are regimes.}
+\begin{tabular}{lccc}
+\toprule
+ & (0) & (1) & (2) \\
+\midrule
+$\mu$ & -0.2212 & 0.0000 & 1.7476 \\
+ & (0.0943) & --- & (0.0464) \\ \addlinespace
+$\sigma$ & 0.0695 & 0.0161 & 0.0090 \\
+ & (0.0019) & (0.0004) & (0.0002) \\ \addlinespace
+$\rho$ & 0.9900 & 0.9900 & 0.9900 \\
+ & (0.0000) & (0.0000) & (0.0000) \\ \addlinespace
+$\Pi_{0\cdot}$ & 0.7511 & 0.1700 & 0.0789 \\
+ & (0.0229) & (0.0206) & (0.0115) \\ \addlinespace
+$\Pi_{1\cdot}$ & 0.0610 & 0.9337 & 0.0053 \\
+ & (0.0063) & (0.0064) & (0.0022) \\ \addlinespace
+$\Pi_{2\cdot}$ & 0.0279 & 0.0029 & 0.9692 \\
+ & (0.0035) & (0.0016) & (0.0034) \\ \addlinespace
+$\pi$ & 0.1487 & 0.4010 & 0.4502 \\
+ & (0.0120) & (0.0301) & (0.0318) \\ \addlinespace
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{figs/cycle_common_ag.pdf}
+\caption{Country cycles after removing the common intercept and linear trend.}
+\end{figure}
+
+\clearpage
+\section{Random-effects intercepts, common linear trend}
+2026-09-17 SA panel, full sample: log real GDP per worker. 74 countries, 8670 observations, 1950-Q1--2026-Q2. Fitted countries: 74. Observations: 8670. Log-likelihood: 23465.89. Ergodic mean of the cycle $E[z]=0.0559$ (0.0268).
+Random intercepts $a_i\sim N(\alpha,\omega^2)$ with $\alpha=-5.9377$ (0.0424), $\omega=0.5121$ (0.0061). Posterior-mean $a_i$: mean -5.536, min -7.953, max -3.922. Common slope $g=0.0086$ (0.0005).
+\begin{table}[h]
+\centering
+\caption{Regime AR(1), transition matrix, and ergodic $\pi$. Columns are regimes.}
+\begin{tabular}{lccc}
+\toprule
+ & (0) & (1) & (2) \\
+\midrule
+$\mu$ & -0.8646 & 0.0000 & 0.2813 \\
+ & (0.1094) & --- & (0.0354) \\ \addlinespace
+$\sigma$ & 0.0750 & 0.0188 & 0.0070 \\
+ & (0.0026) & (0.0005) & (0.0001) \\ \addlinespace
+$\rho$ & 0.9899 & 0.9899 & 0.9898 \\
+ & (0.0004) & (0.0001) & (0.0002) \\ \addlinespace
+$\Pi_{0\cdot}$ & 0.7023 & 0.2780 & 0.0197 \\
+ & (0.0319) & (0.0326) & (0.0091) \\ \addlinespace
+$\Pi_{1\cdot}$ & 0.0580 & 0.8821 & 0.0599 \\
+ & (0.0072) & (0.0103) & (0.0071) \\ \addlinespace
+$\Pi_{2\cdot}$ & 0.0081 & 0.0474 & 0.9445 \\
+ & (0.0029) & (0.0062) & (0.0055) \\ \addlinespace
+$\pi$ & 0.0949 & 0.4190 & 0.4861 \\
+ & (0.0098) & (0.0211) & (0.0247) \\ \addlinespace
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{figs/cycle_re_ai.pdf}
+\caption{Country cycles after removing the posterior-mean intercept and the common linear trend.}
+\end{figure}
+\end{document}
