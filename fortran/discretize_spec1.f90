@@ -5,7 +5,8 @@ PROGRAM discretize_spec1
   IMPLICIT NONE
 
   INTEGER, PARAMETER :: nreg = 3
-  INTEGER, PARAMETER :: nn   = 15
+  ! nn is the length of the shared z grid. The joint chain has nreg*nn states.
+  INTEGER, PARAMETER :: nn   = 7
   REAL(wp), PARAMETER :: nsds = 3.0_wp
   REAL(wp), PARAMETER :: rrho = 0.99_wp
 
