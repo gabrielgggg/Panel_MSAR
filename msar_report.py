@@ -92,7 +92,7 @@ def _tabular(res):
     P = np.asarray(pr["P"], dtype=float)
     se_mu = np.atleast_1d(se["mu"]) if se is not None else None
     se_sig = np.atleast_1d(se["sigma"]) if se is not None else None
-    se_rho = np.atleast_1d(se["rho"]) if se is not None else None
+    se_rho = np.atleast_1d(se["rho"]) if se is not None and "rho" in se else None
     se_P = np.asarray(se["P"]) if se is not None and "P" in se else None
     pin_mu = np.zeros(k, dtype=bool)
     if res.zero_mu:

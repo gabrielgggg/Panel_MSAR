@@ -400,6 +400,7 @@ class PanelMSARResults:
     warnings: list = field(default_factory=list)
     has_numba: bool = HAS_NUMBA
     common_rho: bool = True
+    rho_fixed: Optional[float] = None
     common_sigma: bool = False
     zero_mu: bool = False
     random_intercepts: bool = False
@@ -423,7 +424,7 @@ class PanelMSARResults:
         P = np.asarray(pr["P"], dtype=float)
         se_mu = np.atleast_1d(se["mu"]) if have_se else None
         se_sig = np.atleast_1d(se["sigma"]) if have_se else None
-        se_rho = np.atleast_1d(se["rho"]) if have_se else None
+        se_rho = np.atleast_1d(se["rho"]) if have_se and se is not None and "rho" in se else None
         se_P = np.asarray(se["P"]) if have_se and "P" in se else None
 
         def se_at(arr, i):
@@ -530,8 +531,9 @@ class PanelMSARResults:
                 lines.append(f"{'':<{lab}}{_cell_se(se_g, W)}")
         if self.common_rho:
             r = float(rho[0])
-            lines.append(f"{'rho (common)':<{lab}}{_cell_est(r, W)}")
-            if have_se:
+            lab_r = "rho (fixed)" if getattr(self, "rho_fixed", None) is not None else "rho (common)"
+            lines.append(f"{lab_r:<{lab}}{_cell_est(r, W)}")
+            if have_se and se_rho is not None:
                 lines.append(f"{'':<{lab}}{_cell_se(se_at(se_rho, 0), W)}")
         if self.common_sigma:
             s0 = float(sig[0])
@@ -688,6 +690,7 @@ class PanelMSAR:
         self,
         n_regimes=3,
         common_rho=True,
+        rho_value=None,
         common_sigma=False,
         random_intercepts=False,
         convergence=False,
@@ -717,7 +720,17 @@ class PanelMSAR:
                 f"needs two observations (got {min_t})."
             )
         self.n_regimes = int(n_regimes)
-        self.common_rho = bool(common_rho)
+        if rho_value is None:
+            self.rho_fixed = None
+            self.common_rho = bool(common_rho)
+        else:
+            rv = float(rho_value)
+            if not np.isfinite(rv) or abs(rv) >= 1.0:
+                raise ValueError(
+                    f"rho_value must be in (-1, 1) (got {rho_value})."
+                )
+            self.rho_fixed = rv
+            self.common_rho = True
         self.common_sigma = bool(common_sigma)
         if lambda_value is not None:
             convergence = True
@@ -737,9 +750,9 @@ class PanelMSAR:
         self.zero_mu = bool(zero_mu)
         self.min_t = int(min_t)
         rho_max = float(rho_max)
-        if not np.isfinite(rho_max) or rho_max <= 0.0 or rho_max >= 1.0:
+        if not np.isfinite(rho_max) or rho_max <= 0.0:
             raise ValueError(
-                f"rho_max must be in (0, 1) (got {rho_max})."
+                f"rho_max must be positive and finite (got {rho_max})."
             )
         self.rho_max = rho_max
         lambda_max = float(lambda_max)
@@ -946,10 +959,11 @@ class PanelMSAR:
                 if j == k - 1:
                     continue
                 names.append(f"logitP[{i}->{j}]")
-        if not self.common_rho:
-            names += [f"rho[{s}]" for s in range(k)]
-        else:
-            names += ["rho"]
+        if self.rho_fixed is None:
+            if not self.common_rho:
+                names += [f"rho[{s}]" for s in range(k)]
+            else:
+                names += ["rho"]
         names += [f"mu[{s}]" for s in self._free_mu_indices()]
         if not self.common_sigma:
             names += [f"sigma[{s}]" for s in range(k)]
@@ -983,7 +997,9 @@ class PanelMSAR:
         logits[:, : k - 1] = raw
         P = _softmax_rows(logits)
 
-        if not self.common_rho:
+        if self.rho_fixed is not None:
+            rho = np.full(k, float(self.rho_fixed))
+        elif not self.common_rho:
             rho = _rho_from_u(theta[i:i + k], self.rho_max)
             i += k
         else:
@@ -1040,10 +1056,11 @@ class PanelMSAR:
         logits = np.log(np.clip(P, 1e-12, 1.0))
         raw = logits[:, : k - 1] - logits[:, k - 1][:, None]
         th = list(raw.ravel())
-        if not self.common_rho:
-            th += [float(_u_from_rho(r, self.rho_max)) for r in rho]
-        else:
-            th += [float(_u_from_rho(np.mean(rho), self.rho_max))]
+        if self.rho_fixed is None:
+            if not self.common_rho:
+                th += [float(_u_from_rho(r, self.rho_max)) for r in rho]
+            else:
+                th += [float(_u_from_rho(np.mean(rho), self.rho_max))]
         th += [float(mu[s]) for s in self._free_mu_indices()]
         if not self.common_sigma:
             th += [float(np.log(s)) for s in sig]
@@ -1432,12 +1449,12 @@ class PanelMSAR:
             out["lambda"] = raw["logit_lambda"] * lam * (1.0 - lam / cap)
 
         cap = float(self.rho_max)
-        if not self.common_rho:
+        if self.rho_fixed is None and not self.common_rho:
             out["rho"] = np.array([
                 raw[f"rho[{s}]"] * cap * (1.0 - (p["rho"][s] / cap) ** 2)
                 for s in range(k)
             ])
-        else:
+        elif self.rho_fixed is None:
             r = float(p["rho"][0])
             out["rho"] = raw["rho"] * cap * (1.0 - (r / cap) ** 2)
 
@@ -1774,6 +1791,7 @@ class PanelMSAR:
             warnings=warnings,
             has_numba=HAS_NUMBA,
             common_rho=self.common_rho,
+            rho_fixed=self.rho_fixed,
             common_sigma=self.common_sigma,
             zero_mu=self.zero_mu,
             random_intercepts=self.random_intercepts,
