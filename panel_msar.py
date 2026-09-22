@@ -403,6 +403,7 @@ class PanelMSARResults:
     rho_fixed: Optional[float] = None
     common_sigma: bool = False
     zero_mu: bool = False
+    zero_ez: bool = False
     random_intercepts: bool = False
     convergence: bool = False
     rho_max: float = 0.995
@@ -460,6 +461,11 @@ class PanelMSARResults:
             lines.append(
                 "All regime means restricted to 0. "
                 "Regimes ordered by sigma (or rho if sigma is common)."
+            )
+        elif getattr(self, "zero_ez", False):
+            lines.append(
+                "Unconditional E[z] restricted to 0. "
+                "Regimes ordered by mu; one regime mean is implied by that restriction."
             )
         else:
             lines.append(
@@ -695,6 +701,7 @@ class PanelMSAR:
         random_intercepts=False,
         convergence=False,
         zero_mu=False,
+        zero_ez=False,
         min_t=8,
         rho_max=RHO_MAX,
         lambda_value=None,
@@ -748,6 +755,9 @@ class PanelMSAR:
         self._gh2_b = zb.ravel()
         self._gh2_w = (wa * wb).ravel()
         self.zero_mu = bool(zero_mu)
+        self.zero_ez = bool(zero_ez)
+        if self.zero_mu and self.zero_ez:
+            raise ValueError("zero_mu and zero_ez cannot both be True.")
         self.min_t = int(min_t)
         rho_max = float(rho_max)
         if not np.isfinite(rho_max) or rho_max <= 0.0:
@@ -945,11 +955,40 @@ class PanelMSAR:
         """Index of the median regime after means are ordered."""
         return self.n_regimes // 2
 
+    def _ez_pin_index(self):
+        """Regime mean solved so that E[z] = 0. Not a free parameter."""
+        return self.n_regimes - 1
+
     def _free_mu_indices(self):
         if self.zero_mu:
             return []
+        if self.zero_ez:
+            pin = self._ez_pin_index()
+            return [s for s in range(self.n_regimes) if s != pin]
         mid = self._mid_regime()
         return [s for s in range(self.n_regimes) if s != mid]
+
+    def _mu_with_zero_ez(self, mu, rho, P):
+        """Fill the pinned regime mean so the ergodic mean of z is 0."""
+        k = self.n_regimes
+        pin = self._ez_pin_index()
+        w = np.zeros(k)
+        _, ez0 = ergodic_cycle_mean(np.zeros(k), rho, P)
+        for s in range(k):
+            basis = np.zeros(k)
+            basis[s] = 1.0
+            _, ez = ergodic_cycle_mean(basis, rho, P)
+            w[s] = ez - ez0
+        if abs(w[pin]) < 1e-8:
+            mu = np.array(mu, dtype=float, copy=True)
+            mu[pin] = 0.0
+            return mu
+        acc = ez0
+        for s in self._free_mu_indices():
+            acc += w[s] * float(mu[s])
+        mu = np.array(mu, dtype=float, copy=True)
+        mu[pin] = -acc / w[pin]
+        return mu
 
     def param_names(self):
         k = self.n_regimes
@@ -1010,6 +1049,8 @@ class PanelMSAR:
         for s in self._free_mu_indices():
             mu[s] = theta[i]
             i += 1
+        if self.zero_ez:
+            mu = self._mu_with_zero_ez(mu, rho, P)
 
         if not self.common_sigma:
             sig = np.exp(np.clip(theta[i:i + k], -20.0, 5.0))
@@ -1410,10 +1451,13 @@ class PanelMSAR:
         P = p["P"][np.ix_(order, order)]
         a = p["a"]
         g = p["g"]
-        pin = self._mid_regime()
-        shift = float(mu[pin])
-        mu = mu - shift
-        a = a + shift
+        if self.zero_ez:
+            shift = 0.0
+        else:
+            pin = self._mid_regime()
+            shift = float(mu[pin])
+            mu = mu - shift
+            a = a + shift
         self._last_mu_shift = shift
         return self._pack_from_dicts(
             P, rho, mu, sig, g, a, omega=p.get("omega"),
@@ -1461,6 +1505,11 @@ class PanelMSAR:
         mu_se = np.full(k, np.nan)
         if self.zero_mu:
             mu_se[:] = 0.0
+        elif self.zero_ez and cov is not None:
+            mu_se = self._mu_se_zero_ez(theta, cov)
+        elif self.zero_ez:
+            for s in self._free_mu_indices():
+                mu_se[s] = raw[f"mu[{s}]"]
         else:
             mu_se[self._mid_regime()] = 0.0
             for s in self._free_mu_indices():
@@ -1475,6 +1524,23 @@ class PanelMSAR:
             out["sigma"] = raw["sigma"] * float(p["sigma"][0])
         out["P"] = self._se_P(p["P"], cov)
         return out
+
+    def _mu_se_zero_ez(self, theta, cov):
+        """Delta-method SEs for regime means when one mean enforces E[z]=0."""
+        k = self.n_regimes
+        theta = np.asarray(theta, dtype=float)
+        cov = np.asarray(cov, dtype=float)
+        base = self._unpack(theta)["mu"]
+        eps = 1e-5
+        jac = np.zeros((k, theta.size))
+        for j in range(theta.size):
+            th = theta.copy()
+            th[j] += eps
+            jac[:, j] = (self._unpack(th)["mu"] - base) / eps
+        var = jac @ cov @ jac.T
+        se = np.sqrt(np.clip(np.diag(var), 0.0, np.inf))
+        se[~np.isfinite(se)] = np.nan
+        return se
 
     def _se_P(self, P, cov):
         """Delta-method SEs for row-stochastic P from free logits."""
@@ -1794,6 +1860,7 @@ class PanelMSAR:
             rho_fixed=self.rho_fixed,
             common_sigma=self.common_sigma,
             zero_mu=self.zero_mu,
+            zero_ez=self.zero_ez,
             random_intercepts=self.random_intercepts,
             convergence=self.convergence,
             rho_max=self.rho_max,

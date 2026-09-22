@@ -1,6 +1,6 @@
 PROGRAM discretize_spec1
-  ! Spec 1, 2026-09-17 SA panel, full sample.
-  ! Stationary MS-AR for z. Rho is 0.99 in every regime.
+  ! RE intercepts, common linear trend, E[z]=0.
+  ! 2026-09-17 SA panel, full sample. Stationary MS-AR for z only.
   USE NL, ONLY: wp, discretizeMSAR
   IMPLICIT NONE
 
@@ -8,7 +8,6 @@ PROGRAM discretize_spec1
   ! nn is the length of the shared z grid. The joint chain has nreg*nn states.
   INTEGER, PARAMETER :: nn   = 7
   REAL(wp), PARAMETER :: nsds = 3.0_wp
-  REAL(wp), PARAMETER :: rrho = 0.99_wp
 
   REAL(wp), DIMENSION(nreg) :: mus, rrhos, sstds
   REAL(wp), DIMENSION(nreg, nreg) :: Pi
@@ -18,16 +17,16 @@ PROGRAM discretize_spec1
   INTEGER, DIMENSION(nreg*nn, 3) :: mmap
   INTEGER, DIMENSION(nreg, nn) :: revmap
 
-  ! Regime order is increasing mu. Median mu is pinned at 0.
-  mus   = (/ -0.2514_wp, 0.0_wp, 1.7443_wp /)
-  rrhos = rrho
-  sstds = (/  0.0699_wp, 0.0161_wp, 0.0090_wp /)
+  ! Regime order is increasing mu. E[z]=0 is already imposed.
+  mus   = (/ -1.0703_wp, -0.0794_wp, 0.2903_wp /)
+  rrhos = (/  0.9899_wp,  0.9900_wp, 0.9899_wp /)
+  sstds = (/  0.0738_wp,  0.0186_wp, 0.0069_wp /)
 
   ! Rows from, columns to. Entries are counts per 10000; each row adds to 10000.
   Pi = TRANSPOSE(RESHAPE( [ &
-    7351.0_wp, 1931.0_wp,  718.0_wp, &
-     650.0_wp, 9300.0_wp,   50.0_wp, &
-     280.0_wp,   23.0_wp, 9697.0_wp  &
+    6943.0_wp, 2876.0_wp,  181.0_wp, &
+     638.0_wp, 8778.0_wp,  584.0_wp, &
+      52.0_wp,  506.0_wp, 9442.0_wp  &
   ], [nreg, nreg] )) / 10000.0_wp
 
   CALL discretizeMSAR(mus, rrhos, sstds, Pi, nn, nsds, &
