@@ -1,0 +1,57 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,graphicx,setspace,caption,hyperref}
+\usepackage[T1]{fontenc}
+\usepackage{mathpazo}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}
+\captionsetup{font=small,skip=6pt}
+\title{Panel MS-AR(1) for EMBI countries\\[0.4em]\large Seasonally adjusted real GDP per worker}
+\author{}
+\date{}
+\begin{document}
+\maketitle
+\section{Model}
+Countries that are in the J.P.\ Morgan EMBI Global as of April 2025, or that appear on an earlier published EMBI Global coverage list (Korea, Thailand, Croatia, and Tunisia). Of that list, 43 countries are in the 2026-09-17 panel.
+One specification. Joint panel Markov-switching AR(1) around a common linear trend, with Normal random intercepts. No catch-up term.
+\begin{align}
+y_{it} &= a_i + g\, t + z_{it}, \\
+a_i &\sim \mathcal{N}(\alpha,\omega^2), \\
+z_{i,t+1} &= \bigl(1-\rho(s_{it})\bigr)\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}, \\
+s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}).
+\end{align}
+Outcome is log seasonally adjusted real GDP per worker. Three regimes. The unconditional mean of the cycle is restricted to $E[z]=0$ (the median regime mean is not pinned at 0). $\sigma$ and $\rho$ switch. $|\rho|<0.99$. Random intercepts use 11-point Gauss--Hermite. Plotted cycles use the posterior mean of $a_i$. Standard errors are delta-method from a numerical Hessian.
+\clearpage
+\section{EMBI countries: random intercepts and a common linear trend}
+EMBI subsample of the 2026-09-17 SA panel, $y_{it}=a_i+gt+z_{it}$, $E[z]=0$. 43 countries, 4403 observations, 1963-Q1--2026-Q2. Fitted countries: 43. Observations: 4403. Log-likelihood: 10717.25.
+Random intercepts $a_i\sim N(\alpha,\omega^2)$ with $\alpha=-5.8228$ (0.0365), $\omega=0.5610$ (0.0115). Posterior-mean $a_i$: mean -6.070, min -8.029, max -4.770. Common slope $g=0.0097$ (0.0006).
+\begin{table}[h]
+\centering
+\caption{Regime AR(1), transition matrix, and ergodic $\pi$. Columns are regimes.}
+\begin{tabular}{lccc}
+\toprule
+ & (0) & (1) & (2) \\
+\midrule
+$\mu$ & -0.9910 & -0.1418 & 0.3634 \\
+ & (0.1818) & --- & (0.0231) \\ \addlinespace
+$\sigma$ & 0.0913 & 0.0230 & 0.0087 \\
+ & (0.0048) & (0.0008) & (0.0003) \\ \addlinespace
+$\rho$ & 0.9899 & 0.9900 & 0.9897 \\
+ & (0.0006) & (0.0001) &  \\ \addlinespace
+$\Pi_{0\cdot}$ & 0.6278 & 0.3535 & 0.0187 \\
+ & (0.0515) & (0.0528) & (0.0141) \\ \addlinespace
+$\Pi_{1\cdot}$ & 0.0614 & 0.8719 & 0.0667 \\
+ & (0.0097) & (0.0146) & (0.0104) \\ \addlinespace
+$\Pi_{2\cdot}$ & 0.0035 & 0.0796 & 0.9169 \\
+ & (0.0044) & (0.0113) & (0.0100) \\ \addlinespace
+$\pi$ & 0.0858 & 0.4963 & 0.4178 \\
+ & (0.0122) & (0.0277) & (0.0317) \\ \addlinespace
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{figs/cycle_embi.pdf}
+\caption{Country cycles after removing the posterior-mean intercept and the common linear trend.}
+\end{figure}
+\end{document}

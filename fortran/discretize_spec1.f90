@@ -1,6 +1,7 @@
 PROGRAM discretize_spec1
-  ! RE intercepts, common linear trend, E[z]=0.
-  ! 2026-09-17 SA panel, full sample. Stationary MS-AR for z only.
+  ! EMBI countries, 1990 onward. Common growth trend removed.
+  ! RE intercepts and Barro catch-up are not passed in. E[z]=0.
+  ! Stationary MS-AR for z only.
   USE NL, ONLY: wp, discretizeMSAR
   IMPLICIT NONE
 
@@ -18,15 +19,16 @@ PROGRAM discretize_spec1
   INTEGER, DIMENSION(nreg, nn) :: revmap
 
   ! Regime order is increasing mu. E[z]=0 is already imposed.
-  mus   = (/ -1.0703_wp, -0.0794_wp, 0.2903_wp /)
-  rrhos = (/  0.9899_wp,  0.9900_wp, 0.9899_wp /)
-  sstds = (/  0.0738_wp,  0.0186_wp, 0.0069_wp /)
+  mus   = (/ -0.0845_wp, -0.0161_wp, 0.1099_wp /)
+  rrhos = (/  0.9900_wp,  0.7826_wp, 0.9900_wp /)
+  sstds = (/  0.0243_wp,  0.0892_wp, 0.0095_wp /)
 
   ! Rows from, columns to. Entries are counts per 10000; each row adds to 10000.
+  ! Row 1's last count is 657 so the row is 10000 (printed 0.0658 rounded up).
   Pi = TRANSPOSE(RESHAPE( [ &
-    6943.0_wp, 2876.0_wp,  181.0_wp, &
-     638.0_wp, 8778.0_wp,  584.0_wp, &
-      52.0_wp,  506.0_wp, 9442.0_wp  &
+    9023.0_wp,  320.0_wp,  657.0_wp, &
+    3017.0_wp, 6803.0_wp,  180.0_wp, &
+     594.0_wp,   90.0_wp, 9316.0_wp  &
   ], [nreg, nreg] )) / 10000.0_wp
 
   CALL discretizeMSAR(mus, rrhos, sstds, Pi, nn, nsds, &
