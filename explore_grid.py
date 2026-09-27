@@ -60,6 +60,45 @@ def tauchen_row(z, mean, sd):
     return p / total
 
 
+def farmer_toda_row(z, qrow, mean, var):
+    """Match farmerTodaRow in fortran/NL.f90. Returns (p, matched)."""
+    nn = z.size
+    qsum = float(np.sum(qrow))
+    if nn == 1 or qsum <= 0.0:
+        p = np.zeros(nn)
+        p[0] = 1.0
+        return p, False
+    qq = np.maximum(qrow, 0.0)
+    qq = (1.0 - 1.0e-12) * qq / qq.sum() + 1.0e-12 / nn
+    t2bar = mean * mean + max(var, 0.0)
+    z1 = z - mean
+    z2 = z * z - t2bar
+    lam1 = 0.0
+    lam2 = 0.0
+    for _ in range(80):
+        expo = np.clip(lam1 * z1 + lam2 * z2, -60.0, 60.0)
+        ww = qq * np.exp(expo)
+        sw = float(ww.sum())
+        if not (sw > 0.0) or not np.isfinite(sw):
+            break
+        prow = ww / sw
+        g1 = float(np.sum(prow * z1))
+        g2 = float(np.sum(prow * z2))
+        if max(abs(g1), abs(g2)) < 1.0e-10:
+            return prow, True
+        h11 = float(np.sum(prow * z1 * z1) - g1 * g1) + 1.0e-10
+        h12 = float(np.sum(prow * z1 * z2) - g1 * g2)
+        h22 = float(np.sum(prow * z2 * z2) - g2 * g2) + 1.0e-10
+        det = h11 * h22 - h12 * h12
+        if abs(det) < 1.0e-18:
+            break
+        d1 = (h22 * g1 - h12 * g2) / det
+        d2 = (-h12 * g1 + h11 * g2) / det
+        lam1 -= d1
+        lam2 -= d2
+    return qq, False
+
+
 def transition(z, regime):
     rows = []
     for z0 in z:
