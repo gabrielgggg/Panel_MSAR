@@ -1,4 +1,9 @@
-"""1985-2019, drop US/Germany/Japan/China: common a + g t, E[z]=0, |rho|<0.99."""
+"""1985-2019, drop US/Germany/Japan/China.
+
+Two-step baseline: pooled OLS of a + g t, then MS-AR on the residual
+with E[z]=0 and |rho|<0.99. Running this script replaces the existing PDF.
+The PDF currently in this folder was estimated before that change.
+"""
 from __future__ import annotations
 
 import sys
@@ -13,7 +18,7 @@ sys.path.insert(0, str(HERE))
 
 from panel_msar import PanelMSAR
 from msar_report import compile_tex, save_cycle_pdf, _tabular, _trend_note
-from run_msar_re import load_panel
+from load_panel import load_panel
 
 YEAR_MIN = 1985.0
 YEAR_MAX = 2019.75  # 2019Q4
@@ -48,16 +53,19 @@ def _tex(sample_line, res, fig, absent):
         r"\section{Model}",
         r"Seasonally adjusted real GDP per worker, 2026-09-17 vintage, "
         r"1985Q1 through 2019Q4. "
-        + drop_note
-        + r" No country random effects and no catch-up term.",
+        + drop_note,
         r"\begin{align}",
-        r"y_{it} &= a + g\, t + z_{it}, \\",
-        r"z_{i,t+1} &= \bigl(1-\rho(s_{it})\bigr)\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}, \\",
-        r"s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}).",
+        r"e_{it} &= y_{it} - a - g\, t, \\",
+        r"s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}), \\",
+        r"z_{i,t+1} &= \bigl(1-\rho(s_{i,t+1})\bigr)\mu(s_{i,t+1}) + \rho(s_{i,t+1})\, z_{it} + \sigma(s_{i,t+1})\,\varepsilon_{it}.",
         r"\end{align}",
-        r"Three regimes. $E[z]=0$ (the median regime mean is not pinned at 0). "
+        r"The regime $s_{it}$ is the one that produced $z_{it}$. "
+        r"$a$ and $g$ are pooled OLS, chosen so the residual has no pooled "
+        r"level and no pooled slope. The plotted cycle is that residual. "
+        r"Three regimes. The MS-AR imposes $E[z]=0$. "
         rf"$\sigma$ and $\rho$ switch, with $|\rho|<{RHO_MAX}$. "
-        r"Standard errors are delta-method from a numerical Hessian.",
+        r"Standard errors are delta-method from a numerical Hessian of the "
+        r"cycle parameters. $a$ and $g$ have none.",
         r"\clearpage",
         rf"\section{{{SPEC_TITLE}}}",
         sample_line
@@ -72,7 +80,7 @@ def _tex(sample_line, res, fig, absent):
         r"\begin{figure}[h]",
         r"\centering",
         rf"\includegraphics[width=0.75\textwidth]{{{fig.as_posix()}}}",
-        r"\caption{Country cycles after removing the common intercept and the linear trend.}",
+        r"\caption{Country cycles: pooled OLS residuals.}",
         r"\end{figure}",
         r"\end{document}",
     ]
@@ -94,7 +102,7 @@ def main():
         print(f"Requested drop but not in panel: {', '.join(absent)}", flush=True)
     sample_line = (
         rf"2026-09-17 SA panel, 1985Q1--2019Q4, excluding the US, Germany, and Japan. "
-        rf"$y_{{it}}=a+gt+z_{{it}}$, $E[z]=0$. "
+        rf"Pooled OLS $y_{{it}}=a+gt+e_{{it}}$, then MS-AR on $e$ with $E[z]=0$. "
         rf"{sub.country.nunique()} countries, {len(sub)} observations, "
         rf"{sub.period.min()}--{sub.period.max()}."
     )
@@ -103,11 +111,6 @@ def main():
     mod = PanelMSAR(
         n_regimes=3,
         common_rho=False,
-        common_sigma=False,
-        random_intercepts=False,
-        convergence=False,
-        include_trend=True,
-        zero_ez=True,
         min_t=12,
         rho_max=RHO_MAX,
     )

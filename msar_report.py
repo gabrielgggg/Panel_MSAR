@@ -83,7 +83,6 @@ def _pair_rows(name, vals, ses, k, pinned=None):
 
 def _tabular(res):
     k = res.n_regimes
-    mid = k // 2
     pr = res.params
     se = res.se_params
     mu = _as1d(pr["mu"], k)
@@ -94,12 +93,6 @@ def _tabular(res):
     se_sig = np.atleast_1d(se["sigma"]) if se is not None else None
     se_rho = np.atleast_1d(se["rho"]) if se is not None and "rho" in se else None
     se_P = np.asarray(se["P"]) if se is not None and "P" in se else None
-    pin_mu = np.zeros(k, dtype=bool)
-    if res.zero_mu:
-        pin_mu[:] = True
-    else:
-        pin_mu[mid] = True
-
     rows = []
     if res.common_rho:
         r = np.full(k, float(rho[0]))
@@ -107,13 +100,13 @@ def _tabular(res):
         if se_rho is not None:
             sr[:] = _se_at(se_rho, 0)
         pairs = [
-            (r"$\mu$", mu, se_mu, pin_mu),
+            (r"$\mu$", mu, se_mu, None),
             (r"$\sigma$", sig, se_sig, None),
             (r"$\rho$ (common)", r, sr, None),
         ]
     else:
         pairs = [
-            (r"$\mu$", mu, se_mu, pin_mu),
+            (r"$\mu$", mu, se_mu, None),
             (r"$\sigma$", sig, se_sig, None),
             (r"$\rho$", rho, se_rho, None),
         ]
@@ -146,77 +139,16 @@ def _tabular(res):
 
 def _trend_note(res):
     pr = res.params
-    se = res.se_params or {}
-    bits = []
     a, g = pr.get("a"), pr.get("g")
-    if getattr(res, "convergence", False):
-        al = pr.get("alpha", pr.get("a_bar"))
-        lam = pr.get("lambda")
-        om = pr.get("omega")
-        omb = pr.get("omega_b")
-        sa = se.get("alpha")
-        sl = se.get("lambda")
-        so = se.get("omega")
-        sob = se.get("omega_b")
-        extra_a = f" ({float(sa):.4f})" if sa is not None and np.isfinite(float(sa)) else ""
-        extra_l = f" ({float(sl):.4f})" if sl is not None and np.isfinite(float(sl)) else ""
-        extra_o = f" ({float(so):.4f})" if so is not None and np.isfinite(float(so)) else ""
-        extra_b = f" ({float(sob):.4f})" if sob is not None and np.isfinite(float(sob)) else ""
-        lam_txt = rf"$\lambda={float(lam):.4f}$"
-        if getattr(res, "lambda_fixed", None) is not None:
-            lam_txt += r" (fixed)"
-        elif extra_l:
-            lam_txt += extra_l
-        eq = (
-            r"$y_{it}=a_i + b_i\lambda^{t-T_{i0}}+z_{it}$"
-            if not getattr(res, "include_trend", True)
-            else r"$y_{it}=a_i + g t + b_i\lambda^{t-T_{i0}}+z_{it}$"
-        )
-        bits.append(
-            rf"Permanent RE intercepts and catch-up "
-            + eq +
-            rf" with $\alpha={float(al):.4f}${extra_a}, "
-            rf"$\omega={float(om):.4f}${extra_o}, "
-            + lam_txt + rf", $\omega_b={float(omb):.4f}${extra_b}."
-        )
-        if isinstance(a, dict):
-            aa = np.array(list(a.values()), dtype=float)
-            bits.append(
-                rf"Posterior-mean $a_i$: mean {aa.mean():.3f}, "
-                rf"min {aa.min():.3f}, max {aa.max():.3f}."
-            )
-        bb = pr.get("b")
-        if isinstance(bb, dict) and bb:
-            bv = np.array(list(bb.values()), dtype=float)
-            bits.append(
-                rf"Posterior-mean $b_i$: mean {bv.mean():.3f}, "
-                rf"min {bv.min():.3f}, max {bv.max():.3f}."
-            )
-    elif getattr(res, "random_intercepts", False):
-        al, om = pr.get("alpha"), pr.get("omega")
-        sa = se.get("alpha")
-        so = se.get("omega")
-        extra_a = f" ({float(sa):.4f})" if sa is not None and np.isfinite(float(sa)) else ""
-        extra_o = f" ({float(so):.4f})" if so is not None and np.isfinite(float(so)) else ""
-        bits.append(
-            rf"Random intercepts $a_i\sim N(\alpha,\omega^2)$ with "
-            rf"$\alpha={float(al):.4f}${extra_a}, $\omega={float(om):.4f}${extra_o}."
-        )
-        if isinstance(a, dict):
-            aa = np.array(list(a.values()), dtype=float)
-            bits.append(
-                rf"Posterior-mean $a_i$: mean {aa.mean():.3f}, "
-                rf"min {aa.min():.3f}, max {aa.max():.3f}."
-            )
-    elif a is not None and not isinstance(a, dict):
-        sa = se.get("a")
-        extra = f" ({float(sa):.4f})" if sa is not None and np.isfinite(sa) else ""
-        bits.append(rf"Common intercept $a={float(a):.4f}${extra}.")
-    if getattr(res, "include_trend", True) and g is not None and not isinstance(g, dict):
-        sg = se.get("g")
-        extra = f" ({float(sg):.4f})" if sg is not None and np.isfinite(sg) else ""
-        bits.append(rf"Common slope $g={float(g):.4f}${extra}.")
-    return " ".join(bits)
+    return (
+        rf"Pooled OLS of $y_{{it}}$ on a constant and $t$ gives "
+        rf"$a={float(a):.4f}$ and $g={float(g):.4f}$ "
+        r"(no standard errors). "
+        r"$a$ is the intercept at the first date in the estimation sample. "
+        r"The plotted cycle is that residual, so the pooled sample has "
+        r"no average level and no average slope. "
+        r"The MS-AR likelihood is fit to the residual alone, with $E[z]=0$."
+    )
 
 
 def compile_tex(tex_path: Path):

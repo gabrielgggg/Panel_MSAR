@@ -1,4 +1,4 @@
-"""Simulate the 3-regime panel MS-AR DGP and recover parameters jointly."""
+"""Simulate a 3-regime panel and recover it with pooled OLS plus an MS-AR."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -27,7 +27,7 @@ def main():
         f"years {int(df.year.min())}-{int(df.year.max())}"
     )
 
-    model = PanelMSAR(n_regimes=3, common_rho=True, common_sigma=False, min_t=12)
+    model = PanelMSAR(n_regimes=3, common_rho=True, min_t=12)
     res = model.fit(
         df["country"], df["year"], df["y"],
         n_starts=4, maxiter=250, seed=11,
@@ -37,7 +37,7 @@ def main():
     print(res.summary())
     print()
     print("True vs estimate")
-    print(f"  a      {true['a']:.4f}   {res.params['a']:.4f}")
+    print(f"  a OLS at first sample date   {res.params['a']:.4f}")
     print(f"  g      {true['g']:.4f}   {res.params['g']:.4f}")
     print(f"  rho    {true['rho']:.4f}   {res.params['rho']:.4f}")
     print(f"  mu     {true['mu']}   {res.params['mu']}")
