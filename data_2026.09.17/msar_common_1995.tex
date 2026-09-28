@@ -1,0 +1,55 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,graphicx,setspace,caption,hyperref}
+\usepackage[T1]{fontenc}
+\usepackage{mathpazo}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}
+\captionsetup{font=small,skip=6pt}
+\title{Panel MS-AR(1): common intercept and linear trend\\[0.4em]\large 1995 through the end of the sample, excluding the US, Germany, Japan, and China}
+\author{}
+\date{}
+\begin{document}
+\maketitle
+\section{Model}
+Seasonally adjusted real GDP per worker, 2026-09-17 vintage, 1995-Q1 through 2026-Q2. United States, Germany, and Japan are excluded. China is not in this vintage.
+\begin{align}
+y_{it} &= a + g\, t + z_{it}, \\
+s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}), \\
+z_{i,t+1} &= \bigl(1-\rho(s_{i,t+1})\bigr)\mu(s_{i,t+1}) + \rho(s_{i,t+1})\, z_{it} + \sigma(s_{i,t+1})\,\varepsilon_{it}.
+\end{align}
+The regime $s_{it}$ is the one that produced $z_{it}$. $\varepsilon_{it}$ is the innovation. $g$ is the within-country slope, so a country that enters later does not shift $g$ through its level. $a$ is then set so that $z_{it}=y_{it}-a-gt$ has mean zero. Three regimes. The MS-AR imposes $E[z]=0$. $\sigma$ and $\rho$ switch, with $|\rho|<0.99$. Standard errors are delta-method from a numerical Hessian of the cycle parameters. $a$ and $g$ have none.
+\clearpage
+\section{Common intercept and linear trend, 1995 through the end of the sample, ex US, Germany, Japan, China}
+2026-09-17 SA panel, 1995-Q1 through 2026-Q2, excluding the US, Germany, and Japan. $y_{it}=a+gt+z_{it}$, $g$ the within-country slope, $E[z]=0$. 71 countries, 7274 observations, 1995-Q1--2026-Q2. Fitted countries: 71. Observations: 7274. Log-likelihood: 18466.42.
+The within-country slope is $g=0.0160$ and the intercept that zeros the pooled mean of $z$ is $a=-5.2516$ (no standard errors). $a$ is the intercept at the first date in the estimation sample. $z_{it}=y_{it}-a-gt$ is the cycle in the figure. Its average within-country slope is zero. The MS-AR is the law of $z$, with $E[z]=0$.
+\begin{table}[h]
+\centering
+\caption{Regime AR(1), transition matrix, and ergodic $\pi$. Columns are regimes.}
+\begin{tabular}{lccc}
+\toprule
+ & (0) & (1) & (2) \\
+\midrule
+$\mu$ & -0.6851 & -0.6817 & 1.1860 \\
+ & (0.0848) & (0.0396) & (0.0173) \\ \addlinespace
+$\sigma$ & 0.0757 & 0.0160 & 0.0095 \\
+ & (0.0024) & (0.0003) & (0.0002) \\ \addlinespace
+$\rho$ & 0.9900 & 0.9900 & 0.9900 \\
+ & (0.0000) & (0.0000) & (0.0000) \\ \addlinespace
+$\Pi_{0\cdot}$ & 0.7100 & 0.2163 & 0.0737 \\
+ & (0.0272) & (0.0240) & (0.0111) \\ \addlinespace
+$\Pi_{1\cdot}$ & 0.0621 & 0.9364 & 0.0015 \\
+ & (0.0060) & (0.0061) & (0.0019) \\ \addlinespace
+$\Pi_{2\cdot}$ & 0.0298 & 0.0010 & 0.9691 \\
+ & (0.0040) & (0.0022) & (0.0038) \\ \addlinespace
+$\pi$ & 0.1429 & 0.4918 & 0.3653 \\
+ & (0.0112) & (0.0168) & (0.0120) \\ \addlinespace
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{figs/cycle_common_1995.pdf}
+\caption{Country cycles $z_{it}=y_{it}-a-gt$.}
+\end{figure}
+\end{document}
