@@ -520,6 +520,146 @@ end function
   END SUBROUTINE discretizeMSAR
 
   !
+  ! One Tauchen row of P(z' on destGrid | conditional mean, sd).
+  ! Midpoint bins, with the outside tails assigned to the endpoints.
+  ! The origin z need not lie on destGrid. The row sums to 1.
+  !
+  SUBROUTINE tauchenOnGrid(destGrid, condMean, sdIn, prow)
+    REAL(wp), INTENT(IN), DIMENSION(:) :: destGrid
+    REAL(wp), INTENT(IN) :: condMean, sdIn
+    REAL(wp), INTENT(OUT), DIMENSION(SIZE(destGrid)) :: prow
+    INTEGER :: nn, j
+    REAL(wp) :: sd, leftEdge, rightEdge, cdfL, cdfR, oneMinus
+
+    nn = SIZE(destGrid)
+    sd = MAX(sdIn, 1.0E-12_wp)
+    IF (nn < 1) THEN
+      ERROR STOP 'tauchenOnGrid: empty destination grid'
+    END IF
+    IF (nn == 1) THEN
+      prow(1) = 1.0_wp
+      RETURN
+    END IF
+
+    DO j = 1,nn
+      IF (j == 1) THEN
+        rightEdge = 0.5_wp * (destGrid(1) + destGrid(2))
+        CALL cumnor( (rightEdge - condMean) / sd, cdfR, oneMinus)
+        prow(j) = cdfR
+      ELSEIF (j == nn) THEN
+        leftEdge = 0.5_wp * (destGrid(nn) + destGrid(nn-1))
+        CALL cumnor( (leftEdge - condMean) / sd, cdfL, oneMinus)
+        prow(j) = oneMinus
+      ELSE
+        leftEdge = 0.5_wp * (destGrid(j) + destGrid(j-1))
+        rightEdge = 0.5_wp * (destGrid(j+1) + destGrid(j))
+        CALL cumnor( (leftEdge - condMean) / sd, cdfL, oneMinus)
+        CALL cumnor( (rightEdge - condMean) / sd, cdfR, oneMinus)
+        prow(j) = cdfR - cdfL
+      END IF
+    END DO
+    prow = MAX(prow, 0.0_wp)
+    cdfL = SUM(prow)
+    IF (cdfL <= 0.0_wp) THEN
+      ERROR STOP 'tauchenOnGrid: a row sums to 0'
+    END IF
+    prow = prow / cdfL
+  END SUBROUTINE tauchenOnGrid
+
+  !
+  ! MS-AR(1) on regime-specific z grids. Each regime has noZ nodes on
+  ! [mu +/- nsd * sigma/sqrt(1-rho^2)]. The state is a node of the
+  ! concatenated grid: nodes 1..noZ are regime 1, the next block regime 2,
+  ! and so on. Numeric z values from different regimes are not merged.
+  ! s' is drawn first. z' is then placed on the grid of s' by Tauchen,
+  !   P(node of s' | node of s) = Pi(s'|s) * Tauchen(z' on grid of s' | z, s').
+  ! No Farmer-Toda. If the stationary iteration fails, the last iterate
+  ! is returned and the transition matrix is left in place.
+  !
+  SUBROUTINE discretizeMSARgrids(mus, rrhos, sstds, Pi, noZ, nsd, &
+      zgrid, bigTran, stationary)
+    REAL(wp), INTENT(IN), DIMENSION(:) :: mus, rrhos, sstds
+    REAL(wp), INTENT(IN), DIMENSION(SIZE(mus), SIZE(mus)) :: Pi
+    INTEGER, INTENT(IN) :: noZ
+    REAL(wp), INTENT(IN) :: nsd
+    REAL(wp), INTENT(OUT), DIMENSION(SIZE(mus)*noZ) :: zgrid, stationary
+    REAL(wp), INTENT(OUT), DIMENSION(SIZE(mus)*noZ, SIZE(mus)*noZ) :: bigTran
+    INTEGER :: nreg, nstate, is, isp, iz, iFrom, lo, iter
+    INTEGER, PARAMETER :: maxIter = 100000
+    REAL(wp) :: rho2, sdUse, uncondSd, condMean, rowSum, gap
+    REAL(wp), ALLOCATABLE, DIMENSION(:) :: zBlock, tauchenRow, stt0
+
+    nreg = SIZE(mus)
+    IF (SIZE(rrhos) /= nreg .OR. SIZE(sstds) /= nreg) THEN
+      ERROR STOP 'discretizeMSARgrids: mus, rrhos, sstds size mismatch'
+    END IF
+    IF (SIZE(Pi, 1) /= nreg .OR. SIZE(Pi, 2) /= nreg) THEN
+      ERROR STOP 'discretizeMSARgrids: Pi is not nreg x nreg'
+    END IF
+    IF (noZ < 1) THEN
+      ERROR STOP 'discretizeMSARgrids: noZ must be at least 1'
+    END IF
+    IF (.NOT. (nsd > 0.0_wp)) THEN
+      ERROR STOP 'discretizeMSARgrids: nsd must be positive'
+    END IF
+    DO is = 1,nreg
+      IF (ABS(rrhos(is)) >= 1.0_wp) THEN
+        ERROR STOP 'discretizeMSARgrids: |rho| must be < 1'
+      END IF
+      IF (.NOT. (sstds(is) > 0.0_wp)) THEN
+        ERROR STOP 'discretizeMSARgrids: sigma must be positive'
+      END IF
+      rowSum = SUM(Pi(is, :))
+      IF (ABS(rowSum - 1.0_wp) > 1.0E-6_wp) THEN
+        ERROR STOP 'discretizeMSARgrids: a row of Pi does not sum to 1'
+      END IF
+    END DO
+
+    nstate = nreg * noZ
+    ALLOCATE(zBlock(noZ), tauchenRow(noZ), stt0(nstate))
+    DO is = 1,nreg
+      rho2 = rrhos(is) * rrhos(is)
+      sdUse = MAX(sstds(is), 1.0E-12_wp)
+      uncondSd = sdUse / SQRT(1.0_wp - rho2)
+      CALL linspace(zBlock, mus(is) - nsd * uncondSd, &
+          mus(is) + nsd * uncondSd, noZ)
+      lo = (is - 1) * noZ + 1
+      zgrid(lo:lo+noZ-1) = zBlock
+    END DO
+
+    bigTran = 0.0_wp
+    DO is = 1,nreg
+      DO iz = 1,noZ
+        iFrom = (is - 1) * noZ + iz
+        DO isp = 1,nreg
+          condMean = (1.0_wp - rrhos(isp)) * mus(isp) &
+              + rrhos(isp) * zgrid(iFrom)
+          lo = (isp - 1) * noZ + 1
+          CALL tauchenOnGrid(zgrid(lo:lo+noZ-1), condMean, sstds(isp), tauchenRow)
+          bigTran(iFrom, lo:hi) = Pi(is, isp) * tauchenRow
+        END DO
+      END DO
+    END DO
+
+    stationary = 0.0_wp
+    stationary(1) = 1.0_wp
+    gap = 1.0_wp
+    iter = 0
+    DO WHILE (gap > 1.0E-9_wp)
+      iter = iter + 1
+      IF (iter > maxIter) THEN
+        WRITE(*,*) 'discretizeMSARgrids: stationary iteration did not converge; last iterate returned'
+        EXIT
+      END IF
+      stt0 = MATMUL(stationary, bigTran)
+      gap = MAXVAL(ABS(stt0 - stationary))
+      stationary = stt0
+    END DO
+    rowSum = SUM(stationary)
+    IF (rowSum > 0.0_wp) stationary = stationary / rowSum
+  END SUBROUTINE discretizeMSARgrids
+
+  !
   !
   !
   PURE SUBROUTINE linspace(ddata, startVal, endVal, noEl)

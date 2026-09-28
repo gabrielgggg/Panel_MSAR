@@ -4,13 +4,13 @@ Grid matches discretizeMSAR in fortran/NL.f90:
   half = nsds * max_s sigma_s / sqrt(1-rho_s^2)
   z from min(mu)-half to max(mu)+half, nn equally spaced points.
 
-P(z'|z,s) is the Tauchen assignment of the conditional normal under the
-regime s that produces z',
-  N((1-rho_s)*mu_s + rho_s*z, sigma_s)
+The next regime s' is drawn from the current regime before z moves.
+P(z'|z,s') is the Tauchen assignment of
+  N((1-rho(s'))*mu(s') + rho(s')*z, sigma(s'))
 onto bins with edges halfway between nodes (open at the ends).
 NL.f90 then adjusts each row with Farmer-Toda so the discrete row matches
 that conditional mean and variance. These exhibits are the Tauchen rows,
-before that adjustment.
+before that adjustment. The joint step is Pi(s'|s) times this kernel.
 
 Regimes are ordered by increasing mu.
 """
@@ -101,19 +101,21 @@ def farmer_toda_row(z, qrow, mean, var):
     return qq, False
 
 
-def transition(z, regime):
+def transition(z, dest):
+    """P(z'|z, s'=dest). s' is drawn before this step."""
     rows = []
     for z0 in z:
-        mean = (1.0 - RHO[regime]) * MU[regime] + RHO[regime] * z0
-        rows.append(tauchen_row(z, mean, SIG[regime]))
+        mean = (1.0 - RHO[dest]) * MU[dest] + RHO[dest] * z0
+        rows.append(tauchen_row(z, mean, SIG[dest]))
     return np.vstack(rows)
 
 
-def movement_table(z, regime, P):
+def movement_table(z, dest, P):
+    """Drift is E[z'-z | z, s'=dest]."""
     step = z[1] - z[0]
     lines = []
     for i, z0 in enumerate(z):
-        drift = (1.0 - RHO[regime]) * (MU[regime] - z0)
+        drift = (1.0 - RHO[dest]) * (MU[dest] - z0)
         same = P[i, i]
         neighbor = 0.0
         if i > 0:
@@ -127,7 +129,7 @@ def movement_table(z, regime, P):
 def draw_tables(pdf, z, mats):
     fig, axes = plt.subplots(3, 1, figsize=(8.5, 11.0))
     fig.suptitle(
-        r"One-step movement on the 11-point grid ($n_{sd}=2$)",
+        r"One-step movement given $s'$, drawn before $z$ moves ($n_{sd}=2$)",
         fontsize=12,
     )
     col_labels = ["i", "z", "drift", "drift/step", "P(same)", "P(neighbor)", "P(further)"]
@@ -146,7 +148,7 @@ def draw_tables(pdf, z, mats):
                 f"{further:.3f}",
             ])
         ax.set_title(
-            rf"Regime {s}:  $\mu={MU[s]:.4f}$,  $\rho={RHO[s]:.4f}$,  $\sigma={SIG[s]:.4f}$",
+            rf"$s'={s}$:  $\mu={MU[s]:.4f}$,  $\rho={RHO[s]:.4f}$,  $\sigma={SIG[s]:.4f}$",
             loc="left",
             fontsize=10,
         )
@@ -161,7 +163,7 @@ def draw_tables(pdf, z, mats):
 
 def draw_heatmaps(pdf, z, mats):
     fig, axes = plt.subplots(1, 3, figsize=(11.0, 4.2), sharey=True, constrained_layout=True)
-    fig.suptitle(r"$P(z'\mid z,s)$ before Farmer--Toda, 11-point grid", fontsize=12)
+    fig.suptitle(r"$P(z'\mid z,s')$ before Farmer--Toda, 11-point grid", fontsize=12)
     for s, ax in enumerate(axes):
         im = ax.imshow(mats[s], origin="lower", vmin=0.0, vmax=1.0, cmap="Blues", aspect="equal")
         ax.set_xticks(range(z.size))
@@ -171,7 +173,7 @@ def draw_heatmaps(pdf, z, mats):
         ax.set_xlabel(r"$z'$")
         if s == 0:
             ax.set_ylabel(r"$z$")
-        ax.set_title(rf"regime {s}, $\sigma={SIG[s]:.3f}$", fontsize=10)
+        ax.set_title(rf"$s'={s}$, $\sigma={SIG[s]:.3f}$", fontsize=10)
     fig.colorbar(im, ax=axes, fraction=0.046, pad=0.04, label="probability")
     pdf.savefig(fig)
     plt.close(fig)

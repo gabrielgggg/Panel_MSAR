@@ -1,10 +1,12 @@
 """Tauchen rows versus Farmer-Toda rows on the 11-point, nsds=2 grid.
 
-Same 1985-2026Q2 cycle and same grid as explore_grid.py. Farmer-Toda is the
-Newton tilt in fortran/NL.f90: start from a floored Tauchen row and choose
+Same 1985-2026Q2 cycle and same grid as explore_grid.py. Each row is
+P(z'|z,s'), where s' is drawn before z moves. Farmer-Toda is the Newton
+tilt in fortran/NL.f90: start from a floored Tauchen row and choose
 exponential weights so the discrete conditional mean and second moment match
-N((1-rho)*mu + rho*z, sigma). If the Newton step fails, the code keeps the
-floored Tauchen row.
+N((1-rho(s'))*mu(s') + rho(s')*z, sigma(s')). If the Newton step fails,
+the code keeps the floored Tauchen row. The joint step multiplies this
+kernel by Pi(s'|s).
 """
 from pathlib import Path
 
@@ -17,14 +19,15 @@ from explore_grid import MU, RHO, SIG, farmer_toda_row, tauchen_row, z_grid
 OUT = Path(__file__).resolve().parent / "explore_ft.pdf"
 
 
-def rows_for_regime(z, regime):
+def rows_for_destination(z, dest):
+    """Tauchen and Farmer-Toda rows of P(z'|z, s'=dest)."""
     before = []
     after = []
     matched = []
     for z0 in z:
-        mean = (1.0 - RHO[regime]) * MU[regime] + RHO[regime] * z0
-        q = tauchen_row(z, mean, SIG[regime])
-        p, ok = farmer_toda_row(z, q, mean, SIG[regime] ** 2)
+        mean = (1.0 - RHO[dest]) * MU[dest] + RHO[dest] * z0
+        q = tauchen_row(z, mean, SIG[dest])
+        p, ok = farmer_toda_row(z, q, mean, SIG[dest] ** 2)
         before.append(q)
         after.append(p)
         matched.append(ok)
@@ -44,7 +47,7 @@ def stay_neighbor(P, i):
 def draw_compare_table(pdf, z, before, after, matched):
     fig, axes = plt.subplots(3, 1, figsize=(8.5, 11.0))
     fig.suptitle(
-        r"Tauchen versus Farmer--Toda, 11-point grid ($n_{sd}=2$)",
+        r"Tauchen versus Farmer--Toda for $P(z'\mid z,s')$, $n_{sd}=2$",
         fontsize=12,
     )
     labels = [
@@ -70,7 +73,7 @@ def draw_compare_table(pdf, z, before, after, matched):
             ])
         n_ok = int(matched[s].sum())
         ax.set_title(
-            rf"Regime {s}: $\sigma={SIG[s]:.4f}$.  "
+            rf"$s'={s}$: $\sigma={SIG[s]:.4f}$.  "
             rf"Moment match {n_ok}/{z.size} rows.",
             loc="left",
             fontsize=10,
@@ -86,7 +89,7 @@ def draw_compare_table(pdf, z, before, after, matched):
 
 def draw_heatmaps(pdf, z, before, after):
     fig, axes = plt.subplots(3, 2, figsize=(8.2, 10.5), constrained_layout=True)
-    fig.suptitle(r"$P(z'\mid z,s)$: Tauchen (left) and Farmer--Toda (right)", fontsize=12)
+    fig.suptitle(r"$P(z'\mid z,s')$: Tauchen (left) and Farmer--Toda (right)", fontsize=12)
     for s in range(3):
         for col, mat in enumerate((before[s], after[s])):
             ax = axes[s, col]
@@ -94,7 +97,7 @@ def draw_heatmaps(pdf, z, before, after):
             ax.set_xticks(range(0, z.size, 2))
             ax.set_yticks(range(0, z.size, 2))
             ax.set_title(
-                rf"regime {s}, {'Tauchen' if col == 0 else 'Farmer-Toda'}",
+                rf"$s'={s}$, {'Tauchen' if col == 0 else 'Farmer-Toda'}",
                 fontsize=9,
             )
             if s == 2:
@@ -110,12 +113,12 @@ def main():
     z = z_grid()
     before, after, matched = [], [], []
     for s in range(3):
-        b, a, ok = rows_for_regime(z, s)
+        b, a, ok = rows_for_destination(z, s)
         before.append(b)
         after.append(a)
         matched.append(ok)
         print(
-            f"regime {s}: matched {int(ok.sum())}/{z.size}, "
+            f"s'={s}: matched {int(ok.sum())}/{z.size}, "
             f"mean P(same) {b.diagonal().mean():.3f} -> {a.diagonal().mean():.3f}"
         )
     with PdfPages(OUT) as pdf:

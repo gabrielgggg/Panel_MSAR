@@ -27,27 +27,29 @@ def main():
     lo = MU[0] - 2.0 * uncond_sd[0]
     hi = MU[2] + 2.0 * uncond_sd[2]
     grid = np.linspace(lo, hi, 11)
-    # Third grid point from the left.
+    # Third grid point from the left. The conditional uses s'=1, the
+    # regime drawn before z moves, not the regime that produced z_now.
     z_now = grid[2]
-    cond_mean = (1.0 - RHO[1]) * MU[1] + RHO[1] * z_now
+    sp = 1
+    cond_mean = (1.0 - RHO[sp]) * MU[sp] + RHO[sp] * z_now
 
     xs = np.linspace(lo - 0.15, hi + 0.55, 1200)
     fig, ax = plt.subplots(figsize=(8.4, 4.6))
     colors = ["#1f4e79", "#c45911", "#548235"]
     labels = [
         r"uncond. regime 0",
-        r"uncond. regime 1 (middle)",
+        r"uncond. regime 1",
         r"uncond. regime 2",
     ]
     for i in range(3):
         ax.plot(xs, normal_pdf(xs, MU[i], uncond_sd[i]), color=colors[i], lw=1.8, label=labels[i])
     ax.plot(
         xs,
-        normal_pdf(xs, cond_mean, SIG[1]),
+        normal_pdf(xs, cond_mean, SIG[sp]),
         color="#7030a0",
         lw=1.8,
         ls="--",
-        label=r"cond. at 3rd grid point, regime 1",
+        label=r"cond. at 3rd grid point, $s'=1$",
     )
     ax.scatter(grid, np.zeros_like(grid), s=28, c="0.15", zorder=5, clip_on=False)
     ax.scatter([z_now], [0.0], s=54, c="#7030a0", zorder=6, clip_on=False)
@@ -62,7 +64,7 @@ def main():
     print(f"wrote {OUT}")
     print(f"uncond sd {uncond_sd}")
     print(f"grid {grid}")
-    print(f"3rd grid point {z_now}, cond mean {cond_mean}, cond sd {SIG[1]}")
+    print(f"3rd grid point {z_now}, s'={sp}, cond mean {cond_mean}, cond sd {SIG[sp]}")
 
 
 if __name__ == "__main__":
