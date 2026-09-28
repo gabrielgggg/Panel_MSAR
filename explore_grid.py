@@ -1,10 +1,11 @@
-"""One-step movement on an 11-point z grid (nsds=2) for the full-sample cycle.
+"""One-step movement on an 11-point z grid (nsds=2) for the 1985-2026Q2 cycle.
 
 Grid matches discretizeMSAR in fortran/NL.f90:
   half = nsds * max_s sigma_s / sqrt(1-rho_s^2)
   z from min(mu)-half to max(mu)+half, nn equally spaced points.
 
-P(z'|z,s) is the Tauchen assignment of the conditional normal
+P(z'|z,s) is the Tauchen assignment of the conditional normal under the
+regime s that produces z',
   N((1-rho_s)*mu_s + rho_s*z, sigma_s)
 onto bins with edges halfway between nodes (open at the ends).
 NL.f90 then adjusts each row with Farmer-Toda so the discrete row matches
@@ -20,10 +21,10 @@ import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
 from scipy.stats import norm
 
-# Full sample, common growth trend, RE intercepts, E[z]=0. No catch-up.
-MU = np.array([-0.6361, -0.0739, 0.2367])
+# 1985Q1-2026Q2, within-country g, common a, E[z]=0. Ex US, Germany, Japan.
+MU = np.array([-0.7737, -0.7471, 1.1467])
 RHO = np.array([0.9900, 0.9900, 0.9900])
-SIG = np.array([0.0673, 0.0074, 0.0182])
+SIG = np.array([0.0733, 0.0159, 0.0098])
 NN = 11
 NSDS = 2.0
 

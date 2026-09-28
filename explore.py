@@ -1,19 +1,19 @@
-"""Unconditional and one-step conditional densities for the EMBI 1990 MS-AR.
+"""Unconditional and one-step conditional densities for the 1985-2026Q2 MS-AR.
 
 Regimes are ordered by mu. The unconditional law of an AR(1) that stays in
-regime s is N(mu_s, sigma_s / sqrt(1-rho_s^2)). The conditional law of the
-next z, given current z and current regime s, is
-N((1-rho_s)*mu_s + rho_s*z, sigma_s). Both match panel_msar.simulate_panel.
+regime s is N(mu_s, sigma_s / sqrt(1-rho_s^2)). The next regime is drawn
+first. The conditional law of the next z, given current z and that new
+regime s, is N((1-rho_s)*mu_s + rho_s*z, sigma_s).
 """
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Full sample, common growth trend removed, RE intercepts, E[z]=0. No catch-up.
-MU = np.array([-0.6361, -0.0739, 0.2367])
+# 1985Q1-2026Q2, within-country g, common a, E[z]=0. Ex US, Germany, Japan.
+MU = np.array([-0.7737, -0.7471, 1.1467])
 RHO = np.array([0.9900, 0.9900, 0.9900])
-SIG = np.array([0.0673, 0.0074, 0.0182])
+SIG = np.array([0.0733, 0.0159, 0.0098])
 
 OUT = Path(__file__).resolve().parent / "regime_ar_densities.pdf"
 
@@ -54,7 +54,7 @@ def main():
     ax.axhline(0, color="0.5", lw=0.6)
     ax.set_xlabel(r"$z$")
     ax.set_ylabel("density")
-    ax.set_title(r"Within-regime AR(1) densities, full-sample RW cycle")
+    ax.set_title(r"Within-regime AR(1) densities, 1985--2026Q2 cycle")
     ax.legend(frameon=False, fontsize=8, loc="upper right")
     ax.set_ylim(bottom=0)
     fig.tight_layout()

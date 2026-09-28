@@ -1,7 +1,9 @@
-"""1985-2019, drop US/Germany/Japan/China.
+"""1985 through the end of the sample, drop US/Germany/Japan/China.
 
 Two-step baseline: y = a + g t + z. g is the within-country slope,
 a zeros the mean of z, and z is an MS-AR(1) with E[z]=0 and |rho|<0.99.
+The window includes the COVID years and runs through the last quarter
+in the vintage.
 """
 from __future__ import annotations
 
@@ -20,17 +22,16 @@ from msar_report import compile_tex, save_cycle_pdf, _tabular, _trend_note
 from load_panel import load_panel
 
 YEAR_MIN = 1985.0
-YEAR_MAX = 2019.75  # 2019Q4
 RHO_MAX = 0.99
 DROP = {"USA", "DEU", "JPN", "CHN"}
-OUT_PDF = HERE / "msar_common_1985_2019.pdf"
-TEX = HERE / "msar_common_1985_2019.tex"
+OUT_PDF = HERE / "msar_common_1985.pdf"
+TEX = HERE / "msar_common_1985.tex"
 FIGS = HERE / "figs"
-SAMPLE_CSV = HERE / "common_1985_2019_sample.csv"
-SPEC_TITLE = "Common intercept and linear trend, 1985--2019, ex US, Germany, Japan, China"
+SAMPLE_CSV = HERE / "common_1985_sample.csv"
+SPEC_TITLE = "Common intercept and linear trend, 1985 through the end of the sample, ex US, Germany, Japan, China"
 
 
-def _tex(sample_line, res, fig, absent):
+def _tex(sample_line, res, fig, absent, span):
     drop_note = r"United States, Germany, and Japan are excluded."
     if absent:
         drop_note += " China is not in this vintage."
@@ -44,14 +45,15 @@ def _tex(sample_line, res, fig, absent):
         r"\setlength{\parskip}{0.6em}",
         r"\captionsetup{font=small,skip=6pt}",
         r"\title{Panel MS-AR(1): common intercept and linear trend\\[0.4em]"
-        r"\large 1985--2019, excluding the US, Germany, Japan, and China}",
+        r"\large 1985 through the end of the sample, excluding the US, Germany, Japan, and China}",
         r"\author{}",
         r"\date{}",
         r"\begin{document}",
         r"\maketitle",
         r"\section{Model}",
         r"Seasonally adjusted real GDP per worker, 2026-09-17 vintage, "
-        r"1985Q1 through 2019Q4. "
+        + span
+        + r". "
         + drop_note,
         r"\begin{align}",
         r"y_{it} &= a + g\, t + z_{it}, \\",
@@ -94,15 +96,15 @@ def main():
     present_drop = sorted(DROP & set(df["country"].unique()))
     sub = df.loc[
         (df["time"] >= YEAR_MIN)
-        & (df["time"] <= YEAR_MAX)
         & ~df["country"].isin(DROP)
     ].copy()
     sub.to_csv(SAMPLE_CSV, index=False)
     print(f"Dropped (in panel): {', '.join(present_drop)}", flush=True)
     if absent:
         print(f"Requested drop but not in panel: {', '.join(absent)}", flush=True)
+    span = rf"{sub.period.min()} through {sub.period.max()}"
     sample_line = (
-        rf"2026-09-17 SA panel, 1985Q1--2019Q4, excluding the US, Germany, and Japan. "
+        rf"2026-09-17 SA panel, {span}, excluding the US, Germany, and Japan. "
         rf"$y_{{it}}=a+gt+z_{{it}}$, $g$ the within-country slope, $E[z]=0$. "
         rf"{sub.country.nunique()} countries, {len(sub)} observations, "
         rf"{sub.period.min()}--{sub.period.max()}."
@@ -122,9 +124,12 @@ def main():
     )
     print(res, flush=True)
     print(f"check E[z]={float(res.params.get('Ez', np.nan)):.6e}", flush=True)
-    fig = FIGS / "cycle_common_1985_2019.pdf"
+    fig = FIGS / "cycle_common_1985.pdf"
     save_cycle_pdf(res, fig, SPEC_TITLE)
-    TEX.write_text(_tex(sample_line, res, fig.relative_to(HERE), absent), encoding="utf-8")
+    TEX.write_text(
+        _tex(sample_line, res, fig.relative_to(HERE), absent, span),
+        encoding="utf-8",
+    )
     compile_tex(TEX)
     print(f"\nWrote {OUT_PDF}", flush=True)
 

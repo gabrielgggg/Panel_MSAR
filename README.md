@@ -70,6 +70,6 @@ res.filtered_probs[cid]    # time, cycle z = y - a - g t, p_regime0/1/2
 res.plot_detrended("cycle.pdf")
 ```
 
-Current empirical extract: `data_2026.09.17/` (seasonally adjusted real GDP per worker). The 1985–2019 runner is `python data_2026.09.17/run_msar_common_1985.py`. The checked-in PDF for that window was estimated before this two-step baseline; running the script again replaces it.
+Current empirical extract: `data_2026.09.17/` (seasonally adjusted real GDP per worker). The report is 1985 through the end of the sample, excluding the US, Germany, and Japan: `python data_2026.09.17/run_msar_common_1985.py`, written to `data_2026.09.17/msar_common_1985.pdf`.
 
 Dependencies: `numpy`, `pandas`, `scipy`, `numba`, `matplotlib`.
