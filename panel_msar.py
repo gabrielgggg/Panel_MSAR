@@ -1,16 +1,18 @@
 """
 Two-step panel Markov-switching AR(1).
 
-Step 1. Pooled OLS of y on a constant and calendar time t. The residual
-e = y - a - g t satisfies sum(e) = 0 and sum(e * t) = 0 on the estimation
-sample, so the cycle has no pooled level and no pooled slope.
-
-Step 2. MS-AR(1) on e only. a and g are not likelihood parameters.
+    y_it = a + g t + z_it
 
     s_{i,t+1} ~ Markov(Pi | s_it)
     z_{i,t+1} = (1 - rho(s_{i,t+1})) * mu(s_{i,t+1})
                 + rho(s_{i,t+1}) * z_it
                 + sigma(s_{i,t+1}) * eps
+
+g is the within-country slope, so a country that enters later does not
+pull g down through its level. a = mean(y) - g * mean(t) on the pooled
+sample, so z = y - a - g t has mean zero. The average within-country
+slope of z is zero. a and g are not likelihood parameters. The MS-AR
+is the law of z. eps is the Gaussian innovation, not z.
 
 The regime dated t is the one that produced z_t. sigma switches with the
 regime. One rho may be shared (common_rho=True) or each regime has its own.
@@ -402,7 +404,7 @@ class PanelMSARResults:
             return f"{'':<{lab}}" + "".join(cells)
 
         lines = [
-            "Two-step panel MS-AR(1): pooled OLS trend, then MS-AR on residuals",
+            "Panel MS-AR(1): y = a + g t + z, g from the within-country slope",
             (
                 f"Regimes: {k}    Countries: {self.n_countries}    "
                 f"Observations: {self.nobs}"
@@ -411,12 +413,14 @@ class PanelMSARResults:
             f"Converged: {self.success}    {self.message}",
             "",
             (
-                "Pooled OLS removes a common intercept and a common slope "
-                "before the likelihood. Those coefficients have no Hessian "
-                "standard errors. a is the intercept at the first sample date."
+                "g is the within-country slope. a = mean(y) - g*mean(t), "
+                "so z = y - a - g t has mean zero and a zero average "
+                "within-country slope. a and g have no Hessian standard "
+                "errors. a is the intercept at the first sample date. "
+                "The MS-AR is the law of z."
             ),
-            f"{'a (OLS)':<{lab}}{_cell_est(float(pr['a']), W)}",
-            f"{'g (OLS)':<{lab}}{_cell_est(float(pr['g']), W)}",
+            f"{'a':<{lab}}{_cell_est(float(pr['a']), W)}",
+            f"{'g (within)':<{lab}}{_cell_est(float(pr['g']), W)}",
             "",
             (
                 "Unconditional E[z] restricted to 0. "
@@ -479,7 +483,7 @@ class PanelMSARResults:
         return self.summary()
 
     def plot_detrended(self, path, title=None):
-        """Write a PDF of the pooled-OLS residuals."""
+        """Write a PDF of the cycle z = y - a - g t."""
         if not self.filtered_probs:
             raise RuntimeError(
                 "No stored cycles. Call fit(..., store_filtered=True) "
@@ -500,9 +504,9 @@ class PanelMSARResults:
             ax.plot(d["time"], d["cycle"], color=colors[i], lw=1.15, alpha=0.9, label=str(cid))
         ax.axhline(0.0, color="k", lw=0.6, alpha=0.5)
         ax.set_xlabel("Year")
-        ax.set_ylabel("cycle (OLS residual)")
+        ax.set_ylabel("cycle z")
         if title is None:
-            title = "Pooled OLS residual (common a and g removed)"
+            title = "Cycle z = y - a - g t"
         ax.set_title(title)
         ax.grid(True, alpha=0.3)
         ax.legend(
@@ -516,7 +520,7 @@ class PanelMSARResults:
 
 
 class PanelMSAR:
-    """Pooled OLS detrending, then joint MLE of a panel MS-AR(1) on the residual.
+    """Within-country g and a pooled intercept, then MLE of the MS-AR for z.
 
     Parameters
     ----------
@@ -826,20 +830,30 @@ class PanelMSAR:
         tcat = np.concatenate([t for _, t in panels]).astype(np.float64)
         return ycat, tcat, lengths, offsets
 
-    @staticmethod
-    def _ols_ag(y, t):
-        X = np.column_stack([np.ones(len(y)), t])
-        beta, *_ = np.linalg.lstsq(X, y, rcond=None)
-        return float(beta[0]), float(beta[1])
-
     def _detrend_panels(self, panels):
-        """Pooled OLS of y on 1 and t. Return residual panels and (a, g)."""
-        ycat, tcat, _, _ = self._stack_panels(panels)
-        a, g = self._ols_ag(ycat, tcat)
-        out = []
+        """Within-country slope g, then a so the pooled mean of z is zero.
+
+        g uses only deviations from each country's own mean of y and t.
+        A country that enters later changes g through its later growth,
+        not through its level. a = mean(y) - g * mean(t) on the stacked
+        sample. Returns panels of z = y - a - g t and (a, g).
+        """
+        num = 0.0
+        den = 0.0
+        ys = []
+        ts = []
         for y, t in panels:
-            e = np.asarray(y, dtype=float) - a - g * np.asarray(t, dtype=float)
-            out.append((e, np.asarray(t, dtype=float)))
+            y = np.asarray(y, dtype=float)
+            t = np.asarray(t, dtype=float)
+            num += float(np.dot(t - t.mean(), y - y.mean()))
+            den += float(np.dot(t - t.mean(), t - t.mean()))
+            ys.append(y)
+            ts.append(t)
+        g = 0.0 if den <= 0.0 else num / den
+        ycat = np.concatenate(ys)
+        tcat = np.concatenate(ts)
+        a = float(ycat.mean() - g * tcat.mean())
+        out = [(y - a - g * t, t) for y, t in zip(ys, ts)]
         return out, a, g
 
     def _nll(self, theta, packed):
@@ -1068,10 +1082,18 @@ class PanelMSAR:
         panels, a_ols, g_ols = self._detrend_panels(level_panels)
         self._ols = (a_ols, g_ols)
         ycat, tcat, lengths, offsets = self._stack_panels(panels)
-        if abs(float(ycat.sum())) > 1e-6 or abs(float(np.dot(ycat, tcat))) > 1e-6:
+        within_num = 0.0
+        within_den = 0.0
+        for z, t in panels:
+            zc = z - z.mean()
+            tc = t - t.mean()
+            within_num += float(np.dot(tc, zc))
+            within_den += float(np.dot(tc, tc))
+        within_slope = 0.0 if within_den <= 0.0 else within_num / within_den
+        if abs(float(ycat.mean())) > 1e-6 or abs(within_slope) > 1e-8:
             warnings.append(
-                "Pooled OLS residuals are not orthogonal to (1, t) "
-                "at the expected numerical tolerance."
+                "Constructed z = y - a - g t does not have mean zero and "
+                "a zero within-country slope at the expected tolerance."
             )
 
         nobs = int(sum(len(yy) for yy, _ in panels))
@@ -1338,7 +1360,7 @@ class PanelMSAR:
     def bootstrap_se(
         self, country, time, y, theta, B=40, seed=11, maxiter=180, verbose=True,
     ):
-        """Country-resampling bootstrap SEs. Each draw redoes the pooled OLS."""
+        """Country-resampling bootstrap SEs. Each draw redoes the within slope."""
         panels, _ids, _t0, _info = self._prepare(country, time, y)
         n_c = len(panels)
         rng = np.random.default_rng(seed)

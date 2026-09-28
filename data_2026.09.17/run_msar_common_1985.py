@@ -1,8 +1,7 @@
 """1985-2019, drop US/Germany/Japan/China.
 
-Two-step baseline: pooled OLS of a + g t, then MS-AR on the residual
-with E[z]=0 and |rho|<0.99. Running this script replaces the existing PDF.
-The PDF currently in this folder was estimated before that change.
+Two-step baseline: y = a + g t + z. g is the within-country slope,
+a zeros the mean of z, and z is an MS-AR(1) with E[z]=0 and |rho|<0.99.
 """
 from __future__ import annotations
 
@@ -55,13 +54,15 @@ def _tex(sample_line, res, fig, absent):
         r"1985Q1 through 2019Q4. "
         + drop_note,
         r"\begin{align}",
-        r"e_{it} &= y_{it} - a - g\, t, \\",
+        r"y_{it} &= a + g\, t + z_{it}, \\",
         r"s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}), \\",
         r"z_{i,t+1} &= \bigl(1-\rho(s_{i,t+1})\bigr)\mu(s_{i,t+1}) + \rho(s_{i,t+1})\, z_{it} + \sigma(s_{i,t+1})\,\varepsilon_{it}.",
         r"\end{align}",
         r"The regime $s_{it}$ is the one that produced $z_{it}$. "
-        r"$a$ and $g$ are pooled OLS, chosen so the residual has no pooled "
-        r"level and no pooled slope. The plotted cycle is that residual. "
+        r"$\varepsilon_{it}$ is the innovation. "
+        r"$g$ is the within-country slope, so a country that enters later "
+        r"does not shift $g$ through its level. "
+        r"$a$ is then set so that $z_{it}=y_{it}-a-gt$ has mean zero. "
         r"Three regimes. The MS-AR imposes $E[z]=0$. "
         rf"$\sigma$ and $\rho$ switch, with $|\rho|<{RHO_MAX}$. "
         r"Standard errors are delta-method from a numerical Hessian of the "
@@ -80,7 +81,7 @@ def _tex(sample_line, res, fig, absent):
         r"\begin{figure}[h]",
         r"\centering",
         rf"\includegraphics[width=0.75\textwidth]{{{fig.as_posix()}}}",
-        r"\caption{Country cycles: pooled OLS residuals.}",
+        r"\caption{Country cycles $z_{it}=y_{it}-a-gt$.}",
         r"\end{figure}",
         r"\end{document}",
     ]
@@ -102,7 +103,7 @@ def main():
         print(f"Requested drop but not in panel: {', '.join(absent)}", flush=True)
     sample_line = (
         rf"2026-09-17 SA panel, 1985Q1--2019Q4, excluding the US, Germany, and Japan. "
-        rf"Pooled OLS $y_{{it}}=a+gt+e_{{it}}$, then MS-AR on $e$ with $E[z]=0$. "
+        rf"$y_{{it}}=a+gt+z_{{it}}$, $g$ the within-country slope, $E[z]=0$. "
         rf"{sub.country.nunique()} countries, {len(sub)} observations, "
         rf"{sub.period.min()}--{sub.period.max()}."
     )

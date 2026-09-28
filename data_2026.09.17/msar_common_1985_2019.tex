@@ -12,17 +12,17 @@
 \begin{document}
 \maketitle
 \section{Model}
-Seasonally adjusted real GDP per worker, 2026-09-17 vintage, 1985Q1 through 2019Q4. United States, Germany, and Japan are excluded. China is not in this vintage. No country random effects and no catch-up term.
+Seasonally adjusted real GDP per worker, 2026-09-17 vintage, 1985Q1 through 2019Q4. United States, Germany, and Japan are excluded. China is not in this vintage.
 \begin{align}
 y_{it} &= a + g\, t + z_{it}, \\
-z_{i,t+1} &= \bigl(1-\rho(s_{it})\bigr)\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}, \\
-s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}).
+s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}), \\
+z_{i,t+1} &= \bigl(1-\rho(s_{i,t+1})\bigr)\mu(s_{i,t+1}) + \rho(s_{i,t+1})\, z_{it} + \sigma(s_{i,t+1})\,\varepsilon_{it}.
 \end{align}
-Three regimes. $E[z]=0$ (the median regime mean is not pinned at 0). $\sigma$ and $\rho$ switch, with $|\rho|<0.99$. Standard errors are delta-method from a numerical Hessian.
+The regime $s_{it}$ is the one that produced $z_{it}$. $\varepsilon_{it}$ is the innovation. $g$ is the within-country slope, so a country that enters later does not shift $g$ through its level. $a$ is then set so that $z_{it}=y_{it}-a-gt$ has mean zero. Three regimes. The MS-AR imposes $E[z]=0$. $\sigma$ and $\rho$ switch, with $|\rho|<0.99$. Standard errors are delta-method from a numerical Hessian of the cycle parameters. $a$ and $g$ have none.
 \clearpage
 \section{Common intercept and linear trend, 1985--2019, ex US, Germany, Japan, China}
-2026-09-17 SA panel, 1985Q1--2019Q4, excluding the US, Germany, and Japan. $y_{it}=a+gt+z_{it}$, $E[z]=0$. 71 countries, 6378 observations, 1985-Q1--2019-Q4. Fitted countries: 71. Observations: 6378. Log-likelihood: 16926.37.
-Common intercept $a=-4.9832$ (0.0748). Common slope $g=0.0062$ (0.0006).
+2026-09-17 SA panel, 1985Q1--2019Q4, excluding the US, Germany, and Japan. $y_{it}=a+gt+z_{it}$, $g$ the within-country slope, $E[z]=0$. 71 countries, 6378 observations, 1985-Q1--2019-Q4. Fitted countries: 71. Observations: 6378. Log-likelihood: 16800.76.
+The within-country slope is $g=0.0180$ and the intercept that zeros the pooled mean of $z$ is $a=-5.3595$ (no standard errors). $a$ is the intercept at the first date in the estimation sample. $z_{it}=y_{it}-a-gt$ is the cycle in the figure. Its average within-country slope is zero. The MS-AR is the law of $z$, with $E[z]=0$.
 \begin{table}[h]
 \centering
 \caption{Regime AR(1), transition matrix, and ergodic $\pi$. Columns are regimes.}
@@ -30,26 +30,26 @@ Common intercept $a=-4.9832$ (0.0748). Common slope $g=0.0062$ (0.0006).
 \toprule
  & (0) & (1) & (2) \\
 \midrule
-$\mu$ & -1.0619 & -0.7923 & 1.0563 \\
- & (0.0909) & --- & (0.0728) \\ \addlinespace
-$\sigma$ & 0.0562 & 0.0150 & 0.0098 \\
- & (0.0018) & (0.0003) & (0.0002) \\ \addlinespace
+$\mu$ & -0.8530 & -0.7758 & 1.1420 \\
+ & (0.0397) & (0.0629) & (0.0149) \\ \addlinespace
+$\sigma$ & 0.0155 & 0.0618 & 0.0098 \\
+ & (0.0003) & (0.0022) & (0.0002) \\ \addlinespace
 $\rho$ & 0.9900 & 0.9900 & 0.9900 \\
  & (0.0000) & (0.0000) & (0.0000) \\ \addlinespace
-$\Pi_{0\cdot}$ & 0.8257 & 0.1141 & 0.0602 \\
- & (0.0242) & (0.0203) & (0.0120) \\ \addlinespace
-$\Pi_{1\cdot}$ & 0.0444 & 0.9516 & 0.0039 \\
- & (0.0070) & (0.0068) & (0.0024) \\ \addlinespace
-$\Pi_{2\cdot}$ & 0.0245 & 0.0004 & 0.9751 \\
- & (0.0038) & (0.0017) & (0.0035) \\ \addlinespace
-$\pi$ & 0.1620 & 0.3858 & 0.4522 \\
- & (0.0163) & (0.0355) & (0.0379) \\ \addlinespace
+$\Pi_{0\cdot}$ & 0.9536 & 0.0454 & 0.0011 \\
+ & (0.0064) & (0.0064) & (0.0021) \\ \addlinespace
+$\Pi_{1\cdot}$ & 0.1384 & 0.7981 & 0.0636 \\
+ & (0.0248) & (0.0295) & (0.0117) \\ \addlinespace
+$\Pi_{2\cdot}$ & 0.0006 & 0.0222 & 0.9772 \\
+ & (0.0019) & (0.0036) & (0.0035) \\ \addlinespace
+$\pi$ & 0.4341 & 0.1439 & 0.4220 \\
+ & (0.0176) & (0.0145) & (0.0105) \\ \addlinespace
 \bottomrule
 \end{tabular}
 \end{table}
 \begin{figure}[h]
 \centering
 \includegraphics[width=0.75\textwidth]{figs/cycle_common_1985_2019.pdf}
-\caption{Country cycles after removing the common intercept and the linear trend.}
+\caption{Country cycles $z_{it}=y_{it}-a-gt$.}
 \end{figure}
 \end{document}

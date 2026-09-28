@@ -141,13 +141,13 @@ def _trend_note(res):
     pr = res.params
     a, g = pr.get("a"), pr.get("g")
     return (
-        rf"Pooled OLS of $y_{{it}}$ on a constant and $t$ gives "
-        rf"$a={float(a):.4f}$ and $g={float(g):.4f}$ "
+        rf"The within-country slope is $g={float(g):.4f}$ and the "
+        rf"intercept that zeros the pooled mean of $z$ is $a={float(a):.4f}$ "
         r"(no standard errors). "
         r"$a$ is the intercept at the first date in the estimation sample. "
-        r"The plotted cycle is that residual, so the pooled sample has "
-        r"no average level and no average slope. "
-        r"The MS-AR likelihood is fit to the residual alone, with $E[z]=0$."
+        r"$z_{it}=y_{it}-a-gt$ is the cycle in the figure. "
+        r"Its average within-country slope is zero. "
+        r"The MS-AR is the law of $z$, with $E[z]=0$."
     )
 
 

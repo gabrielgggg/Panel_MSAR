@@ -1,4 +1,4 @@
-"""Simulate a 3-regime panel and recover it with pooled OLS plus an MS-AR."""
+"""Simulate a 3-regime panel and recover it with a within-country slope plus an MS-AR."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
