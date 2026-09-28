@@ -1,6 +1,6 @@
 """Tauchen rows versus Farmer-Toda rows on the 11-point, nsds=2 grid.
 
-Same EMBI 1990 cycle and same grid as explore_grid.py. Farmer-Toda is the
+Same full-sample cycle and same grid as explore_grid.py. Farmer-Toda is the
 Newton tilt in fortran/NL.f90: start from a floored Tauchen row and choose
 exponential weights so the discrete conditional mean and second moment match
 N((1-rho)*mu + rho*z, sigma). If the Newton step fails, the code keeps the

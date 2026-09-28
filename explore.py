@@ -10,10 +10,10 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-# EMBI countries, 1990+, common growth trend removed, Barro catch-up, E[z]=0.
-MU = np.array([-0.0845, -0.0161, 0.1099])
-RHO = np.array([0.9900, 0.7826, 0.9900])
-SIG = np.array([0.0243, 0.0892, 0.0095])
+# Full sample, common growth trend removed, RE intercepts, E[z]=0. No catch-up.
+MU = np.array([-0.6361, -0.0739, 0.2367])
+RHO = np.array([0.9900, 0.9900, 0.9900])
+SIG = np.array([0.0673, 0.0074, 0.0182])
 
 OUT = Path(__file__).resolve().parent / "regime_ar_densities.pdf"
 
@@ -54,7 +54,7 @@ def main():
     ax.axhline(0, color="0.5", lw=0.6)
     ax.set_xlabel(r"$z$")
     ax.set_ylabel("density")
-    ax.set_title(r"Within-regime AR(1) densities, EMBI 1990 catch-up cycle")
+    ax.set_title(r"Within-regime AR(1) densities, full-sample RW cycle")
     ax.legend(frameon=False, fontsize=8, loc="upper right")
     ax.set_ylim(bottom=0)
     fig.tight_layout()

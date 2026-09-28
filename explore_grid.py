@@ -1,4 +1,4 @@
-"""One-step movement on an 11-point z grid (nsds=2) for the EMBI 1990 cycle.
+"""One-step movement on an 11-point z grid (nsds=2) for the full-sample cycle.
 
 Grid matches discretizeMSAR in fortran/NL.f90:
   half = nsds * max_s sigma_s / sqrt(1-rho_s^2)
@@ -20,9 +20,10 @@ import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
 from scipy.stats import norm
 
-MU = np.array([-0.0845, -0.0161, 0.1099])
-RHO = np.array([0.9900, 0.7826, 0.9900])
-SIG = np.array([0.0243, 0.0892, 0.0095])
+# Full sample, common growth trend, RE intercepts, E[z]=0. No catch-up.
+MU = np.array([-0.6361, -0.0739, 0.2367])
+RHO = np.array([0.9900, 0.9900, 0.9900])
+SIG = np.array([0.0673, 0.0074, 0.0182])
 NN = 11
 NSDS = 2.0
 

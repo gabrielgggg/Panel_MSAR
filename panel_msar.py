@@ -19,8 +19,8 @@ independent of a_i. λ may be fixed (Barro 2%/year is 0.98) or free
 in (0, lambda_max). Countries are independent given shared parameters;
 latent regimes are country-specific. The panel may be unbalanced.
 
-Timing: the regime dated t governs the transition from z_t to z_{t+1};
-then a new regime is drawn.
+Timing: s_{t+1} is drawn from s_t, then z_{t+1} is drawn from z_t and s_{t+1}.
+The regime dated t is the one that produced z_t.
 
 Time is numeric calendar time on a common origin, at whatever sampling
 frequency the panel is observed (annual, quarterly, ...). Consecutive
@@ -267,21 +267,19 @@ def _country_ll_nb(z, rho, mu, sig, P, pi0):
     for t in range(T - 1):
         zt = z[t]
         ztp = z[t + 1]
-        for s in range(k):
-            resid = (ztp - (mu[s] * one_m_rho[s] + rho[s] * zt)) / sig[s]
-            log_num[s] = (
-                log_filt[s] - 0.5 * LOG2PI - log_sig[s] - 0.5 * resid * resid
+        for sp in range(k):
+            for s in range(k):
+                acc[s] = log_filt[s] + logP[s, sp]
+            log_pred[sp] = _logsumexp_nb(acc)
+        for sp in range(k):
+            resid = (ztp - (mu[sp] * one_m_rho[sp] + rho[sp] * zt)) / sig[sp]
+            log_num[sp] = (
+                log_pred[sp] - 0.5 * LOG2PI - log_sig[sp] - 0.5 * resid * resid
             )
         log_p = _logsumexp_nb(log_num)
         ll += log_p
         for s in range(k):
-            log_num[s] -= log_p
-        for sp in range(k):
-            for s in range(k):
-                acc[s] = log_num[s] + logP[s, sp]
-            log_pred[sp] = _logsumexp_nb(acc)
-        for s in range(k):
-            log_filt[s] = log_pred[s]
+            log_filt[s] = log_num[s] - log_p
     return ll
 
 
@@ -338,7 +336,7 @@ def _run_one_start(payload):
 
 
 def _country_loglik(z, rho, mu, sig, P, pi0, return_filter=False):
-    """Hamilton filter, user's timing. rho, mu, sig are length-k."""
+    """Hamilton filter. s' is drawn first; z' uses s'. rho, mu, sig are length-k."""
     z = np.ascontiguousarray(z, dtype=np.float64)
     rho = np.ascontiguousarray(rho, dtype=np.float64)
     mu = np.ascontiguousarray(mu, dtype=np.float64)
@@ -365,13 +363,13 @@ def _country_loglik(z, rho, mu, sig, P, pi0, return_filter=False):
     filtered[0] = np.exp(log_filt)
     one_m_rho = 1.0 - rho
     for t in range(T - 1):
+        log_pred = logsumexp(log_filt[:, None] + logP, axis=0)
         mean = mu * one_m_rho + rho * z[t]
         log_f = -0.5 * LOG2PI - log_sig - 0.5 * ((z[t + 1] - mean) / sig) ** 2
-        log_num = log_filt + log_f
+        log_num = log_pred + log_f
         log_p = logsumexp(log_num)
         ll += log_p
-        log_s_t = log_num - log_p
-        log_filt = logsumexp(log_s_t[:, None] + logP, axis=0)
+        log_filt = log_num - log_p
         filtered[t + 1] = np.exp(log_filt)
     return ll, filtered
 
@@ -2057,8 +2055,8 @@ def simulate_panel(
         z = rng.normal(mu[s], sd0)
         rows.append((i, cal[0], a + g * t[0] + z, s, z))
         for h in range(1, T):
-            z = mu[s] * (1.0 - rho_v[s]) + rho_v[s] * z + sigma[s] * rng.normal()
             s = int(rng.choice(k, p=P[s]))
+            z = mu[s] * (1.0 - rho_v[s]) + rho_v[s] * z + sigma[s] * rng.normal()
             rows.append((i, cal[h], a + g * t[h] + z, s, z))
     df = pd.DataFrame(rows, columns=["country", "time", "y", "s", "z"])
     df["year"] = df["time"]

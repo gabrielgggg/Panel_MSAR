@@ -1,0 +1,55 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,graphicx,setspace,caption,hyperref}
+\usepackage[T1]{fontenc}
+\usepackage{mathpazo}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}
+\captionsetup{font=small,skip=6pt}
+\title{Panel MS-AR(1): common intercept and linear trend\\[0.4em]\large 1985--2019, excluding the US, Germany, Japan, and China}
+\author{}
+\date{}
+\begin{document}
+\maketitle
+\section{Model}
+Seasonally adjusted real GDP per worker, 2026-09-17 vintage, 1985Q1 through 2019Q4. United States, Germany, and Japan are excluded. China is not in this vintage. No country random effects and no catch-up term.
+\begin{align}
+y_{it} &= a + g\, t + z_{it}, \\
+z_{i,t+1} &= \bigl(1-\rho(s_{it})\bigr)\mu(s_{it}) + \rho(s_{it})\, z_{it} + \sigma(s_{it})\,\varepsilon_{it}, \\
+s_{i,t+1} &\sim \Pi(\,\cdot\mid s_{it}).
+\end{align}
+Three regimes. $E[z]=0$ (the median regime mean is not pinned at 0). $\sigma$ and $\rho$ switch, with $|\rho|<0.99$. Standard errors are delta-method from a numerical Hessian.
+\clearpage
+\section{Common intercept and linear trend, 1985--2019, ex US, Germany, Japan, China}
+2026-09-17 SA panel, 1985Q1--2019Q4, excluding the US, Germany, and Japan. $y_{it}=a+gt+z_{it}$, $E[z]=0$. 71 countries, 6378 observations, 1985-Q1--2019-Q4. Fitted countries: 71. Observations: 6378. Log-likelihood: 16903.85.
+Common intercept $a=-4.9602$ (0.0739). Common slope $g=0.0061$ (0.0006).
+\begin{table}[h]
+\centering
+\caption{Regime AR(1), transition matrix, and ergodic $\pi$. Columns are regimes.}
+\begin{tabular}{lccc}
+\toprule
+ & (0) & (1) & (2) \\
+\midrule
+$\mu$ & -1.0912 & -0.8099 & 1.0343 \\
+ & (0.0891) & --- & (0.0721) \\ \addlinespace
+$\sigma$ & 0.0552 & 0.0151 & 0.0097 \\
+ & (0.0017) & (0.0003) & (0.0002) \\ \addlinespace
+$\rho$ & 0.9900 & 0.9900 & 0.9900 \\
+ & (0.0000) & (0.0000) & (0.0000) \\ \addlinespace
+$\Pi_{0\cdot}$ & 0.8242 & 0.1113 & 0.0645 \\
+ & (0.0234) & (0.0195) & (0.0121) \\ \addlinespace
+$\Pi_{1\cdot}$ & 0.0428 & 0.9533 & 0.0039 \\
+ & (0.0068) & (0.0067) & (0.0022) \\ \addlinespace
+$\Pi_{2\cdot}$ & 0.0250 & 0.0002 & 0.9748 \\
+ & (0.0034) &  & (0.0036) \\ \addlinespace
+$\pi$ & 0.1581 & 0.3786 & 0.4633 \\
+ & (0.0161) & (0.0355) & (0.0376) \\ \addlinespace
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{figs/cycle_common_1985_2019.pdf}
+\caption{Country cycles after removing the common intercept and the linear trend.}
+\end{figure}
+\end{document}
