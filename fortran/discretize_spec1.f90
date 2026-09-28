@@ -1,7 +1,7 @@
 PROGRAM discretize_spec1
   ! EMBI countries, 1990 onward. Common growth trend removed.
   ! RE intercepts and Barro catch-up are not passed in. E[z]=0.
-  ! Stationary MS-AR for z only.
+  ! discretizeMSAR draws s' from s, then steps z under s'.
   USE NL, ONLY: wp, discretizeMSAR
   IMPLICIT NONE
 

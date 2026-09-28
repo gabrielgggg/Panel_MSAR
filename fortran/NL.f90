@@ -418,9 +418,11 @@ end function
   END SUBROUTINE farmerTodaRow
 
   !
-  ! MS-AR(1) on a common z-grid. Farmer-Toda (2017) fills P(z'|z,s);
-  ! the joint chain uses timing P((z,s)->(z',s')) = P(z'|z,s) * Pi(s'|s).
-  ! mmap(:,2) = regime, mmap(:,3) = z index (regime slow, z fast).
+  ! MS-AR(1) on a common z-grid. Farmer-Toda (2017) fills P(z'|z,s).
+  ! s' is drawn first. z' then uses s':
+  !   P((z,s)->(z',s')) = Pi(s'|s) * P(z'|z,s').
+  ! mmap(:,2) = regime that produced z, mmap(:,3) = z index
+  ! (regime slow, z fast).
   !
   SUBROUTINE discretizeMSAR(mus, rrhos, sstds, Pi, nn, nsds, &
       zgrid, bigTran, mmap, revmap, stationary)
@@ -437,6 +439,7 @@ end function
     REAL(wp) :: half, rho2, eMean, eVar, sdUse, rowSum
     REAL(wp), DIMENSION(SIZE(mus)) :: uncondStd
     REAL(wp), DIMENSION(nn, nn) :: Pz, PzQ
+    REAL(wp), DIMENSION(SIZE(mus), nn, nn) :: PzKern
 
     nreg = SIZE(mus)
     IF (SIZE(rrhos) /= nreg .OR. SIZE(sstds) /= nreg) THEN
@@ -490,7 +493,6 @@ end function
       END DO
     END DO
 
-    bigTran = 0.0_wp
     DO is = 1,nreg
       CALL tauchenTransitions(zgrid, mus(is), rrhos(is), sstds(is), PzQ)
       Pz = PzQ
@@ -499,11 +501,16 @@ end function
         eMean = (1.0_wp - rrhos(is)) * mus(is) + rrhos(is) * zgrid(iz)
         CALL farmerTodaRow(zgrid, PzQ(iz, :), eMean, eVar, Pz(iz, :))
       END DO
-      DO iz = 1,nn
-        DO izp = 1,nn
-          DO isp = 1,nreg
+      PzKern(is, :, :) = Pz
+    END DO
+
+    bigTran = 0.0_wp
+    DO is = 1,nreg
+      DO isp = 1,nreg
+        DO iz = 1,nn
+          DO izp = 1,nn
             bigTran(revmap(is, iz), revmap(isp, izp)) = &
-              Pz(iz, izp) * Pi(is, isp)
+              Pi(is, isp) * PzKern(isp, iz, izp)
           END DO
         END DO
       END DO
