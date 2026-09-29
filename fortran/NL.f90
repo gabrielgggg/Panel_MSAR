@@ -636,7 +636,7 @@ end function
               + rrhos(isp) * zgrid(iFrom)
           lo = (isp - 1) * noZ + 1
           CALL tauchenOnGrid(zgrid(lo:lo+noZ-1), condMean, sstds(isp), tauchenRow)
-          bigTran(iFrom, lo:hi) = Pi(is, isp) * tauchenRow
+          bigTran(iFrom, lo:lo+noZ-1) = Pi(is, isp) * tauchenRow
         END DO
       END DO
     END DO
