@@ -35,6 +35,8 @@ The regime dated \(t\) is the one that produced \(z_t\). The next regime is draw
 
 The within slope makes the average within-country slope of \(z\) zero. It does not zero each country's own slope, and it does not make the pooled cloud of \(z\) orthogonal to \(t\).
 
+`PanelMSAR(..., country_fe=True)` replaces only the first stage. \(g\) is the unweighted average, across consecutive sample dates, of the mean of \(\Delta y/\Delta t\) among countries observed on both dates. Then \(a_i\) is the mean of \(y_{it}-gt\) on country \(i\), so \(z_{it}=y_{it}-a_i-gt\) has mean zero inside each country. A country's slope of \(z\) is its own growth minus \(g\). \(a_i\) and \(g\) are not likelihood parameters. The 1985-through-end fixed-effect report is `python data_2026.09.17/run_msar_fe_1985.py`, written to `data_2026.09.17/msar_fe_1985.pdf`.
+
 ## Estimator
 
 `panel_msar.py` (`PanelMSAR`). Multi-start L-BFGS-B on unconstrained cycle parameters: row-wise softmax logits for \(\Pi\) (`k(k-1)` free); `rho = rho_max * tanh`; `sigma = exp`; free means are every `mu[s]` except the one solved from \(E[z]=0\). Starts run in a process pool. Numba Hamilton filter (install `numba`). Hessian standard errors are on the unconstrained cycle parameters, then delta-method to the table. \(a\) and \(g\) are reported from the within-slope step only.

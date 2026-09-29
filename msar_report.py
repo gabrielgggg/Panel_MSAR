@@ -140,6 +140,19 @@ def _tabular(res):
 def _trend_note(res):
     pr = res.params
     a, g = pr.get("a"), pr.get("g")
+    if isinstance(a, dict):
+        vals = np.asarray(list(a.values()), dtype=float)
+        return (
+            rf"Continuing-country growth is $g={float(g):.4f}$ "
+            r"(no standard error). "
+            rf"Country intercepts $a_i$ have mean {float(vals.mean()):.4f}, "
+            rf"minimum {float(vals.min()):.4f}, and maximum {float(vals.max()):.4f} "
+            r"(no standard errors). "
+            r"$a_i$ is the intercept at the first date in the estimation sample. "
+            r"$z_{it}=y_{it}-a_i-gt$ has mean zero in each country and is the "
+            r"cycle in the figure. A country's slope of $z$ is its own growth "
+            r"minus $g$. The MS-AR is the law of $z$, with $E[z]=0$."
+        )
     return (
         rf"The within-country slope is $g={float(g):.4f}$ and the "
         rf"intercept that zeros the pooled mean of $z$ is $a={float(a):.4f}$ "

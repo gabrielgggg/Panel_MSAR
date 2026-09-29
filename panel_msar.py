@@ -13,6 +13,9 @@ pull g down through its level. a = mean(y) - g * mean(t) on the pooled
 sample, so z = y - a - g t has mean zero. The average within-country
 slope of z is zero. a and g are not likelihood parameters. The MS-AR
 is the law of z. eps is the Gaussian innovation, not z.
+country_fe=True replaces that first stage with y_it = a_i + g t + z_it:
+g is the average growth of countries present on both dates of each step,
+and a_i is the country intercept that zeros the mean of z inside country i.
 
 The regime dated t is the one that produced z_t. sigma switches with the
 regime. One rho may be shared (common_rho=True) or each regime has its own.
@@ -403,8 +406,47 @@ class PanelMSARResults:
                 cells.append(_cell_se(se_at(vals_se, s), W))
             return f"{'':<{lab}}" + "".join(cells)
 
+        a_par = pr["a"]
+        country_fe = isinstance(a_par, dict)
+        if country_fe:
+            a_vals = np.asarray(list(a_par.values()), dtype=float)
+            head = (
+                "Panel MS-AR(1): y = a_i + g t + z, "
+                "g from continuing-country growth"
+            )
+            trend_note = (
+                "g is the average, across consecutive dates, of the mean "
+                "growth of countries observed on both dates. "
+                "a_i = mean_t(y_it - g*t_it), so z = y - a_i - g t has "
+                "mean zero in each country. A country's slope of z is its "
+                "own growth minus g. a_i and g have no Hessian standard "
+                "errors. a_i is the intercept at the first sample date. "
+                "The MS-AR is the law of z."
+            )
+            trend_rows = [
+                f"{'g (continuing)':<{lab}}{_cell_est(float(pr['g']), W)}",
+                f"{'a_i mean':<{lab}}{_cell_est(float(a_vals.mean()), W)}",
+                f"{'a_i min':<{lab}}{_cell_est(float(a_vals.min()), W)}",
+                f"{'a_i max':<{lab}}{_cell_est(float(a_vals.max()), W)}",
+            ]
+        else:
+            head = (
+                "Panel MS-AR(1): y = a + g t + z, "
+                "g from the within-country slope"
+            )
+            trend_note = (
+                "g is the within-country slope. a = mean(y) - g*mean(t), "
+                "so z = y - a - g t has mean zero and a zero average "
+                "within-country slope. a and g have no Hessian standard "
+                "errors. a is the intercept at the first sample date. "
+                "The MS-AR is the law of z."
+            )
+            trend_rows = [
+                f"{'a':<{lab}}{_cell_est(float(a_par), W)}",
+                f"{'g (within)':<{lab}}{_cell_est(float(pr['g']), W)}",
+            ]
         lines = [
-            "Panel MS-AR(1): y = a + g t + z, g from the within-country slope",
+            head,
             (
                 f"Regimes: {k}    Countries: {self.n_countries}    "
                 f"Observations: {self.nobs}"
@@ -412,15 +454,8 @@ class PanelMSARResults:
             f"Log-likelihood (cycle): {self.loglik:.4f}",
             f"Converged: {self.success}    {self.message}",
             "",
-            (
-                "g is the within-country slope. a = mean(y) - g*mean(t), "
-                "so z = y - a - g t has mean zero and a zero average "
-                "within-country slope. a and g have no Hessian standard "
-                "errors. a is the intercept at the first sample date. "
-                "The MS-AR is the law of z."
-            ),
-            f"{'a':<{lab}}{_cell_est(float(pr['a']), W)}",
-            f"{'g (within)':<{lab}}{_cell_est(float(pr['g']), W)}",
+            trend_note,
+            *trend_rows,
             "",
             (
                 "Unconditional E[z] restricted to 0. "
@@ -506,7 +541,10 @@ class PanelMSARResults:
         ax.set_xlabel("Year")
         ax.set_ylabel("cycle z")
         if title is None:
-            title = "Cycle z = y - a - g t"
+            if isinstance(self.params.get("a"), dict):
+                title = "Cycle z = y - a_i - g t"
+            else:
+                title = "Cycle z = y - a - g t"
         ax.set_title(title)
         ax.grid(True, alpha=0.3)
         ax.legend(
@@ -522,6 +560,9 @@ class PanelMSARResults:
 class PanelMSAR:
     """Within-country g and a pooled intercept, then MLE of the MS-AR for z.
 
+    country_fe=True uses continuing-country growth and a country intercept
+    instead. The likelihood is unchanged.
+
     Parameters
     ----------
     n_regimes : int
@@ -536,9 +577,15 @@ class PanelMSAR:
     rho_max : float
         Strict upper bound on |rho|. Unconstrained parameter is
         artanh(rho / rho_max). Default 0.995.
+    country_fe : bool
+        If False (default), g is the within-country slope and a is common.
+        If True, g is continuing-country growth and each country has a_i.
     """
 
-    def __init__(self, n_regimes=3, common_rho=True, min_t=8, rho_max=RHO_MAX):
+    def __init__(
+        self, n_regimes=3, common_rho=True, min_t=8, rho_max=RHO_MAX,
+        country_fe=False,
+    ):
         if not isinstance(n_regimes, (int, np.integer)):
             raise TypeError(
                 f"n_regimes must be an integer (got {type(n_regimes).__name__})."
@@ -564,6 +611,7 @@ class PanelMSAR:
                 f"rho_max must be positive and finite (got {rho_max})."
             )
         self.rho_max = rho_max
+        self.country_fe = bool(country_fe)
         self.res_ = None
         self._ols = None
 
@@ -830,25 +878,73 @@ class PanelMSAR:
         tcat = np.concatenate([t for _, t in panels]).astype(np.float64)
         return ycat, tcat, lengths, offsets
 
-    def _detrend_panels(self, panels):
-        """Within-country slope g, then a so the pooled mean of z is zero.
+    def _continuing_growth(self, panels):
+        """Unweighted mean of date-pair growth among countries on both dates.
 
-        g uses only deviations from each country's own mean of y and t.
-        A country that enters later changes g through its later growth,
-        not through its level. a = mean(y) - g * mean(t) on the stacked
-        sample. Returns panels of z = y - a - g t and (a, g).
+        Each consecutive pair of sample dates gets the cross-country mean of
+        (y1 - y0) / (t1 - t0). g is the average of those pair means. A date
+        with more countries does not outweigh a date with fewer, and a
+        country contributes only when it is observed on both dates.
         """
-        num = 0.0
-        den = 0.0
-        ys = []
-        ts = []
+        by_country = []
+        times = set()
         for y, t in panels:
             y = np.asarray(y, dtype=float)
             t = np.asarray(t, dtype=float)
+            mp = {}
+            for yi, ti in zip(y, t):
+                key = round(float(ti), 10)
+                mp[key] = float(yi)
+                times.add(key)
+            by_country.append(mp)
+        ordered = sorted(times)
+        steps = []
+        for t0, t1 in zip(ordered, ordered[1:]):
+            dt = t1 - t0
+            if dt <= 0.0:
+                continue
+            grows = []
+            for mp in by_country:
+                if t0 in mp and t1 in mp:
+                    grows.append((mp[t1] - mp[t0]) / dt)
+            if grows:
+                steps.append(float(np.mean(grows)))
+        if not steps:
+            return 0.0
+        return float(np.mean(steps))
+
+    def _detrend_panels(self, panels):
+        """Remove the first-stage trend and return (z panels, a, g).
+
+        Default: within-country slope g, then one a so the pooled mean of
+        z is zero. g uses only deviations from each country's own mean of
+        y and t. A country that enters later changes g through its later
+        growth, not through its level.
+
+        country_fe: g from _continuing_growth, then a_i = mean(y - g t)
+        on that country's spell. a is a list aligned with panels. z has
+        mean zero inside each country. A faster-growing country still
+        slopes up.
+        """
+        ys = []
+        ts = []
+        for y, t in panels:
+            ys.append(np.asarray(y, dtype=float))
+            ts.append(np.asarray(t, dtype=float))
+        if self.country_fe:
+            g = self._continuing_growth(list(zip(ys, ts)))
+            a_list = []
+            out = []
+            for y, t in zip(ys, ts):
+                ai = float(np.mean(y - g * t))
+                a_list.append(ai)
+                out.append((y - ai - g * t, t))
+            return out, a_list, g
+        num = 0.0
+        den = 0.0
+        for y, t in zip(ys, ts):
             num += float(np.dot(t - t.mean(), y - y.mean()))
             den += float(np.dot(t - t.mean(), t - t.mean()))
-            ys.append(y)
-            ts.append(t)
         g = 0.0 if den <= 0.0 else num / den
         ycat = np.concatenate(ys)
         tcat = np.concatenate(ts)
@@ -1079,22 +1175,32 @@ class PanelMSAR:
             )
 
         level_panels = panels
-        panels, a_ols, g_ols = self._detrend_panels(level_panels)
-        self._ols = (a_ols, g_ols)
+        panels, a_hat, g_hat = self._detrend_panels(level_panels)
+        self._ols = (a_hat, g_hat)
         ycat, tcat, lengths, offsets = self._stack_panels(panels)
-        within_num = 0.0
-        within_den = 0.0
-        for z, t in panels:
-            zc = z - z.mean()
-            tc = t - t.mean()
-            within_num += float(np.dot(tc, zc))
-            within_den += float(np.dot(tc, tc))
-        within_slope = 0.0 if within_den <= 0.0 else within_num / within_den
-        if abs(float(ycat.mean())) > 1e-6 or abs(within_slope) > 1e-8:
-            warnings.append(
-                "Constructed z = y - a - g t does not have mean zero and "
-                "a zero within-country slope at the expected tolerance."
-            )
+        if self.country_fe:
+            max_abs_mean = 0.0
+            for z, _t in panels:
+                max_abs_mean = max(max_abs_mean, abs(float(np.mean(z))))
+            if max_abs_mean > 1e-6:
+                warnings.append(
+                    "Constructed z = y - a_i - g t does not have mean zero "
+                    "inside every country at the expected tolerance."
+                )
+        else:
+            within_num = 0.0
+            within_den = 0.0
+            for z, t in panels:
+                zc = z - z.mean()
+                tc = t - t.mean()
+                within_num += float(np.dot(tc, zc))
+                within_den += float(np.dot(tc, tc))
+            within_slope = 0.0 if within_den <= 0.0 else within_num / within_den
+            if abs(float(ycat.mean())) > 1e-6 or abs(within_slope) > 1e-8:
+                warnings.append(
+                    "Constructed z = y - a - g t does not have mean zero and "
+                    "a zero within-country slope at the expected tolerance."
+                )
 
         nobs = int(sum(len(yy) for yy, _ in panels))
         n_par = len(self.param_names())
@@ -1258,8 +1364,11 @@ class PanelMSAR:
             "rho": rho_out,
             "mu": p["mu"],
             "sigma": p["sigma"],
-            "g": float(g_ols),
-            "a": float(a_ols),
+            "g": float(g_hat),
+            "a": (
+                {cid: float(ai) for cid, ai in zip(ids, a_hat)}
+                if self.country_fe else float(a_hat)
+            ),
             "pi": pi_hat,
             "Ez": ez_hat,
         }
@@ -1360,7 +1469,7 @@ class PanelMSAR:
     def bootstrap_se(
         self, country, time, y, theta, B=40, seed=11, maxiter=180, verbose=True,
     ):
-        """Country-resampling bootstrap SEs. Each draw redoes the within slope."""
+        """Country-resampling bootstrap SEs. Each draw redoes the first stage."""
         panels, _ids, _t0, _info = self._prepare(country, time, y)
         n_c = len(panels)
         rng = np.random.default_rng(seed)
